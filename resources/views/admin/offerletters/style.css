@@ -1,0 +1,360 @@
+*{
+  box-sizing:border-box;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+body{
+
+  background:#eee;
+  padding:30px 0;   /* top-bottom only */
+}
+
+
+/* HEADER WRAP */
+.header-wrap{
+  width:794px;
+  background:#fff;
+  margin:auto;
+  padding:0 50px 60px; 
+  border-radius:10px 10px 10px 10px;
+  position:relative;
+  overflow:hidden;
+
+}
+
+/* TOP BAR */
+.top-bar{
+  height:42px;
+  background:#0b6fae;
+  position:relative;
+
+  width:calc(100% + 50px);  /* body padding = 30px + 30px */
+  margin-left:-50px;        /* body padding ke bahar */
+  margin-right:-45px;
+}
+
+
+
+.top-right{
+  position:absolute;
+  right:0;
+  top:0;
+  height:42px;
+}
+
+.top-right .blue{
+  position:absolute;
+  left:-20px;
+  width:28px;
+  height:182px;
+ background: #0a3069;
+ background: linear-gradient(90deg, rgba(10, 48, 105, 1) 40%, rgba(54, 173, 191, 1) 100%);
+  transform:skewX(45deg);
+}
+
+.top-right .orange{
+  position:absolute;
+  left:20px;
+  width:28px;
+  height:192px;
+  background:#f7941d;
+  transform:skewX(45deg);
+}
+
+.top-right .last{
+  position:absolute;
+  right:-135px;
+  width:90px;
+  height:182px;
+  background:#0b6fae;
+  transform:skewX(45deg);
+}
+/* HEADER CONTENT */
+.header-content{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-top:30px;
+  padding: 18px;
+}
+
+.left{
+  display:flex;
+  gap:14px;
+  align-items:center;
+}
+
+.logo-circle{
+  width:52px;
+  height:52px;
+  border:3px solid #f7941d;
+  border-radius:50%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.logo-icon{
+  width:18px;
+  height:26px;
+  border:2px solid #f7941d;
+}
+
+.brand h3{
+  margin:0;
+  color:#0b6fae;
+  font-size:18px;
+}
+
+.brand p{
+  margin:0;
+  font-size:13px;
+}
+
+/* RIGHT */
+.right p{
+  margin:2px 0;
+  font-size:13px;
+  text-align:right;
+}
+
+/* DOUBLE LINE */
+.double-line{
+  margin:18px 0 30px;
+  height:3px;
+  border-top:5px solid #0b6fae;
+  border-bottom:3px solid #0b6fae;
+  padding: 5px;
+}
+
+/* TITLE */
+.title{
+  text-align:center;
+  color:#0b6fae;
+  letter-spacing:3px;
+  font-size:24px;
+}
+.footer-bar{
+  height:42px;
+  background:#0b6fae;
+
+  position:absolute;        /* 🔴 relative ❌ → absolute ✅ */
+  bottom:0;                 /* 👈 ab bilkul niche touch karega */
+  left:-50px;               /* left se bahar */
+  width:calc(100% + 90px); /* full stretch */
+  margin-top: 100px;
+
+}
+
+
+.letter-content{
+  padding:40px 50px;
+  font-size:14px;
+  line-height:1.7;
+  color:#222;
+}
+
+.row{
+  display:flex;
+  justify-content:space-between;
+  margin-bottom:25px;
+}
+
+.date{
+  font-size:13px;
+}
+
+.letter-title{
+  text-align:center;
+  color:#0b6fae;
+  letter-spacing:2px;
+  margin:25px 0;
+}
+
+.offer-list{
+  margin:10px 0 20px 20px;
+}
+
+.offer-list li{
+  margin-bottom:6px;
+}
+
+.signature{
+  margin-top:50px;
+  margin-left: 500px;
+}
+
+.signature .name{
+  margin-top:40px;
+  font-weight:bold;
+}
+
+.signature span{
+  font-weight:normal;
+  font-size:13px;
+}
+
+.footer-bar .bottom-last{
+  position:absolute;
+  left:35px;
+  width:90px;
+  height:182px;
+  background:#0b6fae;
+  transform:skewX(90deg);
+}
+.footer-bar .bottom-orange{
+  position:absolute;
+  right:705px;          /* SAME as your code */
+  width:28px;
+  height:280px;         /* 🔥 192px → 280px */
+  background:#f7941d;
+  transform:skewX(47deg);
+  bottom:-140px;        /* 🔥 thoda aur bahar */
+}
+
+
+.footer-bar .bottom-blue{
+  position:absolute;
+  right:660px;          /* SAME as your code */
+  width:5px;
+  height:233px;         /* 🔥 192px → 260px */
+  background: linear-gradient(90deg,
+
+    rgba(54, 173, 191, 1) 100%);
+  transform:skewX(47deg);
+  bottom:-130px;        /* 🔥 thoda aur bahar */
+}
+.footer-bar .bottom-blue2{
+  position:absolute;
+  right:650px;          /* SAME as your code */
+  width:5px;
+  height:233px;         /* 🔥 192px → 260px */
+  background: linear-gradient(90deg,
+
+    rgba(54, 173, 191, 1) 100%);
+  transform:skewX(47deg);
+  bottom:-130px;        /* 🔥 thoda aur bahar */
+}
+
+.footer-bar .bottom-orange2{
+  position:absolute;
+  right:608px;          /* SAME as your code */
+  width:28px;
+  height:315px;         /* 🔥 192px → 280px */
+  background:#f7941d;
+  transform:skewX(47deg);
+  bottom:-175px;        /* 🔥 thoda aur bahar */
+
+}
+
+.footer-bar .last-blue{
+  /* position:absolute;
+  right:760px;
+  width:90px;
+  height:100px;
+  background:#0b6fae;
+  transform:skewX(47deg);
+  bottom: 90px; */
+/*   
+  position:absolute;
+  right:790px;
+  width:80px;
+  height:120px;
+  background:#0b6fae;
+  bottom: 102px;
+  transform:skewX(-135deg); */
+
+
+   position:absolute;
+  right:790px;
+  bottom:90px;
+
+  width:60px;
+  height:125px;
+
+  background:linear-gradient(
+    to bottom,
+    #2aa8e0,
+    #0b6fae
+  );
+
+  /* 🔥 IMAGE JAISE ANGLE KE LIYE */
+  transform: rotate(-48deg) skewY(-40deg);
+  
+}
+
+.footer-bar .traingle-blue{
+  position:absolute;
+  right:820px;
+  width:60px;
+  height:70px;
+  background:#0b6fae;
+  bottom: 40px;
+  transform:skewX(47deg);
+}
+
+.right-traingle-blue{
+  position:absolute;
+  right:0;
+  width:140px;
+  height:164px;
+  background:#0b6fae;
+  transform:skewX(130deg);
+  bottom:-5px;
+  opacity: 0.2;
+}
+
+.right-blue{
+  position:absolute;
+  right:93px;
+  width:60px;
+  height:250px;
+  background:#0b6fae;
+  transform:skewX(130deg);
+  bottom:-5px;
+  opacity: 0.2;
+ 
+}
+
+.right-orange{
+   position:absolute;
+  right:215px;
+  width:130px;
+  height:65px;
+  background:#f7941d;
+  transform:skewX(130deg);
+  bottom:42px;
+  opacity: 0.2;
+}
+
+.right-blue1{
+  position:absolute;
+  right:65px;
+  width:6px;
+  height:220px;
+  background:#0a3069;
+  transform:skewX(130deg);
+  bottom:108px;
+ opacity: 0.2;
+}
+.right-blue2{
+  position:absolute;
+  right:80px;
+  width:6px;
+  height:220px;
+  background:#0a3069;
+  transform:skewX(130deg);
+  bottom:108px;
+ opacity: 0.2;
+}
+.right-blue3{
+  position:absolute;
+  right:100px;
+  width:40px;
+  height:220px;
+  background:#0a3069;
+  transform:skewX(130deg);
+  bottom:108px;
+ opacity: 0.2;
+}
+
