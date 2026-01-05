@@ -23,7 +23,6 @@
             <thead>
                 <tr>
                     <th width="10">
-
                     </th>
                     <th>
                         {{ trans('cruds.appUpdate.fields.id') }}
@@ -45,7 +44,6 @@
         </table>
     </div>
 </div>
-
 
 
 @endsection
