@@ -50,7 +50,4 @@
         </form>
     </div>
 </div>
-
-
-
 @endsection
