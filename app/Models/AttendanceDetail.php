@@ -56,6 +56,9 @@ class AttendanceDetail extends Model implements HasMedia
         'updated_at',
         'deleted_at',
         'date',
+        'changed_by',
+        'ip_address',
+        'device_name',
     ];
 
     protected function serializeDate(DateTimeInterface $date)

@@ -16,6 +16,9 @@ use App\Models\Holiday;
 use App\Models\LeaveRequest;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\ValidationException;
+
 use Gate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -145,37 +148,51 @@ public function calendarData(Request $request, User $user)
 public function fetchDetail(Request $request)
 {
     $userId = $request->get('user_id');
-    $date = $request->get('date');
+    $date   = $request->get('date');
 
+    /* ================= ATTENDANCE ================= */
     $attendanceDetail = AttendanceDetail::where('user_id', $userId)
         ->whereDate('date', $date)
         ->first();
 
+    /* ================= ATTENDANCE LOG ================= */
     $attendanceLog = \App\Models\AttendanceLog::where('user_id', $userId)
         ->whereDate('date', $date)
         ->first();
 
-          // Punch In / Punch Out lat-lng
-    $punchInLatitude = $attendanceDetail->punch_in_latitude ?? 0;
-    $punchInLongitude = $attendanceDetail->punch_in_longitude ?? 0;
-    $punchOutLatitude = $attendanceDetail->punch_out_latitude ?? 0;
-    $punchOutLongitude = $attendanceDetail->punch_out_longitude ?? 0;
-
-    $punch_in_location = $attendanceDetail->punch_in_location ?? null;
-    $punch_out_location = $attendanceDetail->punch_out_location ?? null;
-
-
-    $leaveRequest = \App\Models\LeaveRequest::with('leaveType')
-        ->where('user_id', $userId)
-        ->whereDate('date_from', '<=', $date)
-        ->whereDate('date_to', '>=', $date)
+    /* ================= EMPLOYEE (WORK TIME) ================= */
+    $employee = \App\Models\Employee::where('user_id', $userId)
+        ->select('work_start_time', 'work_end_time')
         ->first();
 
-    // Don't abort if attendance is null — just return view
-    return view('admin.attendanceDetails.partials.attendance_modal', compact(
-        'attendanceDetail', 'attendanceLog', 'leaveRequest', 'punchInLatitude', 'punchInLongitude', 'punchOutLatitude', 'punchOutLongitude', 'punch_in_location', 'punch_out_location'
-    ));
+    /* ================= SAFE DATA ================= */
+    $data = [
+        // attendance
+        'attendanceDetail' => $attendanceDetail,
+        'attendanceLog'    => $attendanceLog,
+
+        // work time (always from employee table)
+        'work_start_time'  => $employee?->work_start_time,
+        'work_end_time'    => $employee?->work_end_time,
+
+        // punch in (only if attendance exists)
+        'punchInLatitude'  => $attendanceDetail?->punch_in_latitude,
+        'punchInLongitude' => $attendanceDetail?->punch_in_longitude,
+        'punchInLocation'  => $attendanceDetail?->punch_in_location,
+
+        // punch out
+        'punchOutLatitude' => $attendanceDetail?->punch_out_latitude,
+        'punchOutLongitude'=> $attendanceDetail?->punch_out_longitude,
+        'punchOutLocation' => $attendanceDetail?->punch_out_location,
+
+        // flags for frontend logic
+        'hasPunchIn'       => (bool) $attendanceDetail?->punch_in_time,
+        'hasPunchOut'      => (bool) $attendanceDetail?->punch_out_time,
+    ];
+
+    return view('admin.attendanceDetails.partials.attendance_modal', $data);
 }
+
 
 public function create()
 {
@@ -444,104 +461,100 @@ public function store(StoreAttendanceDetailRequest $request)
             'total_work_minutes' => $actualOut->diffInMinutes($actualIn),
         ]);
     }
+
+
+
 public function updateStatus(Request $request)
 {
-    // 1️⃣ Validate request
-    $validated = $request->validate([
-        'user_id' => 'required|integer|exists:users,id',
-        'date' => 'required|date',
-        'status' => 'required|string|in:present,absent,half_time,leave,week_off,holiday,paid_leave,late',
-        'punch_in_latitude' => 'nullable|numeric',
-        'punch_in_longitude' => 'nullable|numeric',
-        'punch_out_latitude' => 'nullable|numeric',
-        'punch_out_longitude' => 'nullable|numeric',
-        'punch_in_location' => 'nullable|string',
-        'punch_out_location' => 'nullable|string',
-    ]);
+    try {
+        $validated = $request->validate([
+            'user_id' => 'required|exists:users,id',
+            'date' => 'required|date',
+            'status' => 'required|in:present,absent,half_time,leave,week_off,holiday,paid_leave,late',
 
-    // 2️⃣ Get Employee
-    $employee = Employee::where('user_id', $validated['user_id'])->first();
-    if (!$employee) {
-        return response()->json(['success' => false, 'message' => 'Employee not found.'], 404);
+            'punch_type' => 'required|in:in,out,both',
+
+            'punch_in_latitude' => 'nullable|numeric',
+            'punch_in_longitude' => 'nullable|numeric',
+            'punch_out_latitude' => 'nullable|numeric',
+            'punch_out_longitude' => 'nullable|numeric',
+
+            'punch_in_location' => 'nullable|string',
+            'punch_out_location' => 'nullable|string',
+
+            'master_password' => 'required|string',
+            'changed_by' => 'required|string',
+            'device_name' => 'nullable|string',
+            'device_uid' => 'nullable|string',
+
+            'punch_in_image' => 'nullable|image',
+            'punch_out_image' => 'nullable|image',
+        ]);
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        return response()->json(['success' => false, 'message' => $e->errors()], 422);
     }
 
-    // 3️⃣ AttendanceDetail: fetch or create
+    $admin = auth()->user();
+    if (!Hash::check($validated['master_password'], $admin->master_password)) {
+        return response()->json(['success' => false, 'message' => 'Invalid master password'], 403);
+    }
+
+    $employee = Employee::where('user_id', $validated['user_id'])->firstOrFail();
+
     $attendance = AttendanceDetail::firstOrNew([
         'user_id' => $validated['user_id'],
-        'date'    => $validated['date'],
+        'date' => $validated['date'],
     ]);
 
-    // Ensure date is set
-    $attendance->date = $validated['date'];
+    $attendance->status = $validated['status'];
+    $attendance->punch_type = $validated['punch_type'];
+    $attendance->changed_by = $validated['changed_by'];
+    $attendance->ip_address = $request->ip();
+    $attendance->device_name = $validated['device_name'] ?? $request->userAgent();
 
-    // 4️⃣ Set punch_in and punch_out time (if not already there)
-    if (!$attendance->punch_in_time) {
-        $attendance->punch_in_time = $validated['date'].' '.Carbon::parse($employee->work_start_time)->format('H:i:s');
+    /* ---------- Punch In ---------- */
+    if (in_array($validated['punch_type'], ['in', 'both'])) {
+        $attendance->punch_in_time = $attendance->punch_in_time ?? now();
+        $attendance->punch_in_latitude = $validated['punch_in_latitude'];
+        $attendance->punch_in_longitude = $validated['punch_in_longitude'];
+        $attendance->punch_in_location = $validated['punch_in_location'];
     }
-    if (!$attendance->punch_out_time) {
-        $attendance->punch_out_time = $validated['date'].' '.Carbon::parse($employee->work_end_time)->format('H:i:s');
+
+    /* ---------- Punch Out ---------- */
+    if (in_array($validated['punch_type'], ['out', 'both'])) {
+
+        if (!$attendance->punch_in_time) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Punch In required before Punch Out'
+            ], 422);
+        }
+
+        $attendance->punch_out_time = $attendance->punch_out_time ?? now();
+        $attendance->punch_out_latitude = $validated['punch_out_latitude'];
+        $attendance->punch_out_longitude = $validated['punch_out_longitude'];
+        $attendance->punch_out_location = $validated['punch_out_location'];
     }
 
-    // 5️⃣ Location & Coordinates update
-    $attendance->punch_in_latitude   = $validated['punch_in_latitude']   ?? $attendance->punch_in_latitude;
-    $attendance->punch_in_longitude  = $validated['punch_in_longitude']  ?? $attendance->punch_in_longitude;
-    $attendance->punch_out_latitude  = $validated['punch_out_latitude']  ?? $attendance->punch_out_latitude;
-    $attendance->punch_out_longitude = $validated['punch_out_longitude'] ?? $attendance->punch_out_longitude;
-
-    $attendance->punch_in_location   = $validated['punch_in_location']   ?? $attendance->punch_in_location;
-    $attendance->punch_out_location  = $validated['punch_out_location']  ?? $attendance->punch_out_location;
-
-    // 6️⃣ Status update
-    $attendance->status      = $validated['status'];
-    $attendance->employee_id = $employee->id;
-    $attendance->type        = 'manual';
     $attendance->save();
 
-    // 7️⃣ AttendanceLog create/update (only if present)
-    if ($validated['status'] === 'present') {
-        // Make sure both expected and actual times are on same date
-        $workStart = Carbon::parse($attendance->date.' '.$employee->work_start_time);
-        $workEnd   = Carbon::parse($attendance->date.' '.$employee->work_end_time);
-        $actualIn  = Carbon::parse($attendance->punch_in_time);
-        $actualOut = Carbon::parse($attendance->punch_out_time);
+    /* ---------- MEDIA ---------- */
+    if ($request->hasFile('punch_in_image')) {
+        $attendance->clearMediaCollection('punch_in_image');
+        $attendance->addMediaFromRequest('punch_in_image')->toMediaCollection('punch_in_image');
+    }
 
-        // Late calculation (negative ignored with max(0, …))
-        $lateBy = max(0, $actualIn->diffInMinutes($workStart, false));
-
-        // Early calculation (negative ignored)
-        $earlyBy = max(0, $workEnd->diffInMinutes($actualOut, false));
-
-        // Work minutes
-        $expectedWorkMinutes = $workEnd->diffInMinutes($workStart);
-        $actualWorkMinutes   = $actualOut->diffInMinutes($actualIn);
-
-        // Overtime
-        $overtime = max(0, $actualWorkMinutes - $expectedWorkMinutes);
-
-        AttendanceLog::updateOrCreate(
-            [
-                'user_id'     => $employee->user_id,
-                'employee_id' => $employee->id,
-                'date'        => $attendance->date,
-            ],
-            [
-                'expected_in'            => $workStart->format('H:i:s'),
-                'actual_in'              => $actualIn->format('H:i:s'),
-                'late_by_minutes'        => $lateBy,
-                'expected_out'           => $workEnd->format('H:i:s'),
-                'actual_out'             => $actualOut->format('H:i:s'),
-                'left_early_by_minutes'  => $earlyBy,
-                'overtime_by_minutes'    => $overtime,
-                'total_work_minutes'     => $actualWorkMinutes,
-            ]
-        );
+    if ($request->hasFile('punch_out_image')) {
+        $attendance->clearMediaCollection('punch_out_image');
+        $attendance->addMediaFromRequest('punch_out_image')->toMediaCollection('punch_out_image');
     }
 
     return response()->json([
         'success' => true,
-        'message' => 'Attendance and log stored/updated successfully.',
+        'message' => 'Attendance saved successfully'
     ]);
 }
+
 
 
 }

@@ -21,7 +21,7 @@ class Employee extends Model
         // Document Fields
         'cv', 'offer_letter', 'aadhaar_front', 'aadhaar_back',
         'pan_card', 'marksheet', 'certificate', 'passbook',
-        'photo', 'other_document','signature','exprience_letter','document_verified'
+        'photo', 'other_document','signature','exprience_letter','document_verified','company_id','employee_type','employee_duration_months','date_of_birth','anniversary_date','special_terms'
     ];
 
      protected $casts = [

@@ -295,12 +295,12 @@ public function downloadLetter($id)
     /* ------------------------------
        EMPLOYEE PROFILE IMAGE
        Priority:
-       1) employee->photo (uploads/)
-       2) user media library
+       1) employee->photo (uploads)
+       2) user media library (Spatie: collection = image)
     ------------------------------ */
     $employeeImageUrl = null;
 
-    // 1️⃣ From employee table (file)
+    // 1️⃣ From employee table (file system)
     if (!empty($employee->photo)) {
         $path = public_path('uploads/employee_photos/' . $employee->photo);
         if (file_exists($path)) {
@@ -308,31 +308,34 @@ public function downloadLetter($id)
         }
     }
 
-    // 2️⃣ From user media library (Spatie)
-    if (!$employeeImageUrl && $user && $user->image) {
-        $employeeImageUrl = $user->image->preview ?? $user->image->url;
+    // 2️⃣ From user media table (Spatie)
+    if (!$employeeImageUrl && $user) {
+        $media = $user->getFirstMedia('image'); // 👈 collection_name = image
+        if ($media) {
+            $employeeImageUrl = $media->getUrl(); // original image
+        }
     }
 
 
     /* ------------------------------
        SIGNATURE
        Priority:
-       1) employee->signature (file)
-       2) user media library ('signature')
+       1) employee->signature (uploads)
+       2) user media library (collection = signature)
     ------------------------------ */
     $signatureUrl = null;
 
-    // 1️⃣ Signature stored in Employee table
+    // 1️⃣ Signature from employee table
     if (!empty($employee->signature)) {
         $sigPath = public_path('uploads/employee_signatures/' . $employee->signature);
         if (file_exists($sigPath)) {
             $signatureUrl = asset('uploads/employee_signatures/' . $employee->signature);
         }
     }
-
-    // 2️⃣ Signature from User (Spatie Media)
+    
+    // 2️⃣ Signature from user media table
     if (!$signatureUrl && $user) {
-        $sigMedia = $user->getMedia('signature')->last();
+        $sigMedia = $user->getFirstMedia('signature');
         if ($sigMedia) {
             $signatureUrl = $sigMedia->getUrl();
         }
@@ -340,8 +343,7 @@ public function downloadLetter($id)
 
 
     /* ------------------------------
-       RETURN LETTER VIEW (HTML)
-       PDF will be generated via JS
+       RETURN LETTER VIEW
     ------------------------------ */
     return view('admin.salary_increments.letter_pdf', [
         'increment'         => $inc,

@@ -64,7 +64,7 @@ body {
 
 /* Footer */
 .footer-img {
-margin-top: -120px;
+margin-top: -130px;
 width: 100%;
 
 }
@@ -109,6 +109,7 @@ width: 100%;
             <img src="{{ $companyLogoUrl }}">
         @endif
     </div>
+
 </div>
 
 <p class="bold mb-2">Subject: Salary Increment Notification</p>

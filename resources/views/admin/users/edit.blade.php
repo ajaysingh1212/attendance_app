@@ -46,9 +46,12 @@
                     <span class="btn btn-info btn-xs select-all" style="border-radius: 0">{{ trans('global.select_all') }}</span>
                     <span class="btn btn-info btn-xs deselect-all" style="border-radius: 0">{{ trans('global.deselect_all') }}</span>
                 </div>
-                <select class="form-control select2 {{ $errors->has('roles') ? 'is-invalid' : '' }}" name="roles[]" id="roles" multiple required>
+                <select class="form-control select2" name="roles[]" id="roles" multiple required>
                     @foreach($roles as $id => $role)
-                        <option value="{{ $id }}" {{ (in_array($id, old('roles', [])) || $user->roles->contains($id)) ? 'selected' : '' }}>{{ $role }}</option>
+                        <option value="{{ $id }}"
+                            {{ (in_array($id, old('roles', [])) || $user->roles->contains($id)) ? 'selected' : '' }}>
+                            {{ $role }}
+                        </option>
                     @endforeach
                 </select>
                 @if($errors->has('roles'))
@@ -134,6 +137,15 @@
                 @endif
                 <span class="help-block">{{ trans('cruds.user.fields.emergency_number_helper') }}</span>
             </div>
+            {{-- MASTER PASSWORD (ADMIN ONLY) --}}
+            <div class="form-group d-none" id="master-password-wrapper">
+                <label for="master_password">Master Password</label>
+                <input class="form-control {{ $errors->has('master_password') ? 'is-invalid' : '' }}"
+                       type="text"
+                       name="master_password"
+                       id="master_password"
+                       value="{{ old('master_password', $user->master_password) }}">
+            </div>
             <div class="form-group">
                 <label for="image">{{ trans('cruds.user.fields.image') }}</label>
                 <div class="needsclick dropzone {{ $errors->has('image') ? 'is-invalid' : '' }}" id="image-dropzone">
@@ -213,5 +225,34 @@
     }
 }
 
+</script>
+<script>
+    $(document).ready(function () {
+
+        function toggleMasterPassword() {
+            let show = false;
+
+            $('#roles option:selected').each(function () {
+                if ($(this).text().toLowerCase().trim() === 'admin') {
+                    show = true;
+                }
+            });
+
+            if (show) {
+                $('#master-password-wrapper').removeClass('d-none');
+            } else {
+                $('#master-password-wrapper').addClass('d-none');
+                $('#master_password').val('');
+            }
+        }
+
+        // On page load
+        toggleMasterPassword();
+
+        // On role change
+        $('#roles').on('change', function () {
+            toggleMasterPassword();
+        });
+    });
 </script>
 @endsection

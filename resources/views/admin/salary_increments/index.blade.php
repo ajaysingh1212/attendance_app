@@ -68,8 +68,16 @@
                             <div class="table-avatar">
                                 @php
                                     $user = $inc->employee->user ?? null;
-                                    $avatarUrl = $user && $user->image ? ($user->image->preview ?? $user->image->url ?? null) : null;
+                                    $avatarUrl = null;
+
+                                    if ($user) {
+                                        $media = $user->getFirstMedia('image'); // 👈 collection_name = image
+                                        if ($media) {
+                                            $avatarUrl = $media->getUrl(); // original image
+                                        }
+                                    }
                                 @endphp
+
 
                                 @if($avatarUrl)
                                     <img src="{{ $avatarUrl }}" alt="avatar">

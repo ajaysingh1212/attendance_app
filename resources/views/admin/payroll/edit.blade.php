@@ -62,9 +62,43 @@
                             value="{{ old('email', $employee->email) }}" placeholder="Email"  @readonly(false && !Auth::user()->isAdmin()) >
                         <input class="form-control mb-2" id="phone" name="phone"
                             value="{{ old('phone', $employee->phone) }}" placeholder="Phone"  @readonly(false && !Auth::user()->isAdmin()) >
+                        <label>Employee Type</label>
+                            <select class="form-control mb-2" name="employee_type" id="employee_type">
+                                <option value="">Select</option>
+                                @foreach(['Permanent','Provisional','Intern','Contract'] as $type)
+                                    <option value="{{ $type }}"
+                                        {{ old('employee_type', $employee->employee_type) == $type ? 'selected' : '' }}>
+                                        {{ $type }}
+                                    </option>
+                                @endforeach
+                            </select>
+
+                            <div id="employee_duration_section" style="display:none;">
+                                <input type="number"
+                                    class="form-control mb-2"
+                                    name="employee_duration_months"
+                                    placeholder="Duration (in months)"
+                                    value="{{ old('employee_duration_months', $employee->employee_duration_months) }}">
+                            </div>
+
                     </div>
                 </div>
             </div>
+            <script>
+                const empType = document.getElementById('employee_type');
+                const durationBox = document.getElementById('employee_duration_section');
+
+                function toggleDuration(){
+                    if(empType.value && empType.value !== 'Permanent'){
+                        durationBox.style.display = 'block';
+                    }else{
+                        durationBox.style.display = 'none';
+                    }
+                }
+                empType.addEventListener('change', toggleDuration);
+                toggleDuration(); // edit load
+                </script>
+
     @php
         use Illuminate\Support\Facades\Auth;
 
@@ -254,6 +288,37 @@
                 </div>
             </div>
             @endif
+            <div class="col-lg-4 mb-4">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-secondary text-white">
+                        Additional Details
+                    </div>
+                    <div class="card-body">
+
+                        <label>Date of Birth</label>
+                        <input type="date"
+                            class="form-control mb-2"
+                            name="date_of_birth"
+                            value="{{ old('date_of_birth', $employee->date_of_birth) }}">
+
+                        <label>Anniversary Date</label>
+                        <input type="date"
+                            class="form-control mb-2"
+                            name="anniversary_date"
+                            value="{{ old('anniversary_date', $employee->anniversary_date) }}">
+
+                        @if($isAdmin)
+                            <label>Special Terms</label>
+                            <textarea class="form-control"
+                                name="special_terms"
+                                rows="3"
+                                placeholder="Special terms (Admin only)">{{ old('special_terms', $employee->special_terms) }}</textarea>
+                        @endif
+
+                    </div>
+                </div>
+            </div>
+
             <!-- Documents -->
             <div class="col-lg-4 mb-4">
                 <div class="card shadow-sm">

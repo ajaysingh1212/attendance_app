@@ -19,14 +19,49 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 
 
 class PayrollController extends Controller
 {
-    public function index()
-    {
-        return view('admin.salary_payroll.index');
+public function index(Request $request)
+{
+    $month = $request->month ?? now()->month;
+    $year  = $request->year ?? now()->year;
+
+    $alreadyGenerated = Payroll::where('month', $month)
+        ->where('year', $year)
+        ->exists();
+
+    return view('admin.salary_payroll.index', compact(
+        'month',
+        'year',
+        'alreadyGenerated'
+    ));
+}
+
+
+public function verifyMasterPassword(Request $request)
+{
+    $request->validate([
+        'master_password' => 'required',
+        'month' => 'required',
+        'year'  => 'required',
+    ]);
+
+    $user = auth()->user();
+
+    if (!Hash::check($request->master_password, $user->master_password)) {
+        return back()->with('error', '❌ Master password incorrect!');
     }
+
+    // ✅ DIRECTLY CALL generate()
+    $request->merge(['force' => true]);
+
+    return $this->generate($request);
+}
+
+
 
 public function generate(Request $request)
 {
@@ -37,7 +72,15 @@ public function generate(Request $request)
 
     $month = $request->month;
     $year  = $request->year;
+        $alreadyGenerated = Payroll::where('month', $month)
+        ->where('year', $year)
+        ->exists();
 
+    if ($alreadyGenerated && !$request->force) {
+        return redirect()
+            ->route('admin.payroll.index', compact('month', 'year'))
+            ->with('warning', '⚠ Payroll already generated. Master password required.');
+    }
     $start = Carbon::create($year, $month, 1)->startOfMonth();
     $end   = Carbon::create($year, $month, 1)->endOfMonth();
     $daysInMonth = $start->daysInMonth;

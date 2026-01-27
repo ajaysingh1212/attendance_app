@@ -134,6 +134,16 @@
                 <span class="help-block">{{ trans('cruds.user.fields.emergency_number_helper') }}</span>
             </div>
             <div class="form-group">
+                <label for="master_password">Master Password</label>
+                <input class="form-control {{ $errors->has('master_password') ? 'is-invalid' : '' }}" type="text" name="master_password" id="master_password" value="{{ old('master_password', '') }}">
+                @if($errors->has('master_password'))
+                    <div class="invalid-feedback">
+                        {{ $errors->first('master_password') }}
+                    </div>
+                @endif
+                <span class="help-block">{{ trans('cruds.user.fields.emergency_number_helper') }}</span>
+            </div>
+            <div class="form-group">
                 <label for="image">{{ trans('cruds.user.fields.image') }}</label>
                 <div class="needsclick dropzone {{ $errors->has('image') ? 'is-invalid' : '' }}" id="image-dropzone">
                 </div>
