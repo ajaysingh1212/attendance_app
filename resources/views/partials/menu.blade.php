@@ -90,7 +90,7 @@
                 </ul>
             </li>
         @endcan
-       
+
       @can('payroll_access')
     <li class="c-sidebar-nav-dropdown {{ request()->is('admin/payroll-details*') ? 'c-show' : '' }}">
         <a class="c-sidebar-nav-dropdown-toggle" href="#">
@@ -98,7 +98,7 @@
             {{ trans('cruds.payroll.title') }}
         </a>
         <ul class="c-sidebar-nav-dropdown-items">
-            
+
             @can('payroll_detail_access')
                 <li class="c-sidebar-nav-item">
                     <a href="{{ route('admin.employees.index') }}" class="c-sidebar-nav-link {{ request()->is('admin/attendance-details') || request()->is('admin/attendance-details/*') ? 'c-active' : '' }}">
@@ -135,7 +135,15 @@
                 </li>
             @endcan
 
-            
+            @can('experience_letter')
+                <li class="c-sidebar-nav-item">
+                    <a href="{{ route('admin.experience-letters.index') }}"
+                    class="c-sidebar-nav-link {{ request()->is('admin/salary-increments') || request()->is('admin/salary-increments/*') ? 'c-active' : '' }}">
+                        <i class="fa-fw fas fa-level-up-alt c-sidebar-nav-icon"></i>
+                       Experience Letter
+                    </a>
+                </li>
+            @endcan
 
             @can('salary_payroll_create')
                 <li class="c-sidebar-nav-item">
@@ -264,7 +272,7 @@
                     @endcan
                 </ul>
             </li>
-        @endcan   
+        @endcan
        @can('attendance_access')
     <li class="c-sidebar-nav-dropdown {{ request()->is('admin/attendance-details*') ? 'c-show' : '' }}">
         <a class="c-sidebar-nav-dropdown-toggle" href="#">
@@ -393,7 +401,7 @@
             {{-- Track Members --}}
             @can('track_member_access')
                 <li class="c-sidebar-nav-item">
-                    <a href="{{ route('admin.track-members.index') }}" 
+                    <a href="{{ route('admin.track-members.index') }}"
                        class="c-sidebar-nav-link {{ request()->is('admin/track-members') || request()->is('admin/track-members/*') ? 'c-active' : '' }}">
                         <i class="fa-fw fas fa-map-marked c-sidebar-nav-icon"></i>
                         {{ trans('cruds.trackMember.title') }}
@@ -404,7 +412,7 @@
             {{-- Reports --}}
             @can('report_access')
                 <li class="c-sidebar-nav-item">
-                    <a href="{{ route('admin.reports.index') }}" 
+                    <a href="{{ route('admin.reports.index') }}"
                        class="c-sidebar-nav-link {{ request()->is('admin/reports') || request()->is('admin/reports/*') ? 'c-active' : '' }}">
                         <i class="fa-fw far fa-address-card c-sidebar-nav-icon"></i>
                         {{ trans('cruds.report.title') }}
@@ -528,7 +536,7 @@
             </li>
         @endcan
 
-        
+
         @if(file_exists(app_path('Http/Controllers/Auth/ChangePasswordController.php')))
             @can('profile_password_edit')
                 <li class="c-sidebar-nav-item">

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\AttendanceDetailController;
 use App\Http\Controllers\Admin\EmployeeMonthlyAttendanceController;
+use App\Http\Controllers\Admin\ExperienceLetterController;
 use App\Http\Controllers\Admin\HolidayController as AdminHolidayController;
 use App\Http\Controllers\Admin\PayrollAdjustmentController;
 use App\Http\Controllers\Admin\PayrollController;
@@ -81,13 +82,13 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.', 'namespace' => 'Admin', 'mi
     Route::get('admin/attendance-details/fetch-detail', [AttendanceDetailController::class, 'fetchDetail'])->name('admin.attendance-details.fetchDetail');
     Route::get('attendance-details/summary', [AttendanceDetailController::class, 'summary'])
      ->name('summary');
-    
+
     // 🟩 Resource Route
     Route::resource('attendance-details', AttendanceDetailController::class);
 
     //leave tyepe
     Route::resource('leave-types', \App\Http\Controllers\Admin\LeaveTypeController::class);
-    
+
     //holiday
 
     Route::resource('holidays', AdminHolidayController::class);
@@ -156,7 +157,7 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.', 'namespace' => 'Admin', 'mi
     Route::resource('add-request-amounts', 'AddRequestAmountController');
 
     //payroll
-    
+
     Route::get('employees', [EmployeeController::class, 'index'])->name('employees.index');
     Route::get('employees/id', [EmployeeController::class, 'id'])->name('employees.id');
     Route::get('employees/create', [EmployeeController::class, 'create'])->name('employees.create');
@@ -190,7 +191,7 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.', 'namespace' => 'Admin', 'mi
     Route::put('payrolls/manual-adjust/{payrollId}', [PayrollController::class, 'manualAdjustmentUpdate'])->name('payrolls.manualAdjust');
 
     Route::get('payrolls/download/{format}', [PayrollController::class, 'downloadPayrollPdf'])->name('payrolls.download');
-    
+
 
     Route::get('payroll', [PayrollController::class, 'index'])
         ->name('payroll.index');
@@ -212,13 +213,13 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.', 'namespace' => 'Admin', 'mi
     Route::get('payrolls/details', [PayrollController::class, 'details'])
         ->name('payrolls.details');
 
- 
 
 
-    
+
+
     // Leave Request
 
-    // monthly attendence report 
+    // monthly attendence report
         Route::get('employee-monthly-attendance', [EmployeeMonthlyAttendanceController::class, 'index'])
         ->name('employee_monthly_attendance.index');
 
@@ -307,8 +308,22 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.', 'namespace' => 'Admin', 'mi
     Route::post('get-employee-salary', [SalaryIncrementController::class,'getEmployeeSalary'])->name('get.employee.salary');
 
     Route::get('salary-increments/{id}/letter', [SalaryIncrementController::class,'downloadLetter'])->name('salary-increments.letter');
+    Route::resource('experience-letters', ExperienceLetterController::class);
 
-
+    Route::get('experience-letters/{id}/pdf',
+        [ExperienceLetterController::class, 'downloadPdf']
+    )->name('experience-letters.pdf');
+    Route::get('employee-details/{id}',
+        [App\Http\Controllers\Admin\ExperienceLetterController::class, 'getEmployeeDetails']
+    )->name('experience-letters.employee-details');
+Route::get(
+    'experience-letters/{id}/print',
+    [ExperienceLetterController::class,'printLetter']
+)->name('experience-letters.print');
+Route::post(
+    'experience-letters/{id}/update-status',
+    [ExperienceLetterController::class,'updateStatus']
+)->name('admin.experience-letters.updateStatus');
 });
 Route::group(['prefix' => 'profile', 'as' => 'profile.', 'namespace' => 'Auth', 'middleware' => ['auth']], function () {
     // Change password
