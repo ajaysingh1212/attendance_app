@@ -430,24 +430,24 @@ body{
   <p>
       During the period of employment, the employee was responsible for managing
       assigned roles and responsibilities related to the
-      <strong>{{ $letter->department }}</strong> department. Their key duties included
+      <strong>{{ $letter->department }}</strong> department. His/Her key duties included
       handling daily operational tasks, coordinating with team members,
-      maintaining professional communication with clients/vendors,
+      maintaining professional communication with clients,
       and ensuring timely completion of assigned projects.
   </p>
 
   <p>
-      Throughout their tenure, <strong>{{ $employee->full_name }}</strong> demonstrated strong
+      Throughout his/her tenure, <strong>{{ $employee->full_name }}</strong> demonstrated strong
       dedication, sincerity, and a professional attitude towards work.
-      They showed the ability to work both independently and as part of a team.
-      Their performance met our expectations and contributed positively
+      He/She showed the ability to work both independently and as part of a team.
+      His/Her performance met our expectations and contributed positively
       to the growth and productivity of the organization.
   </p>
 
   <p>
-      The employee maintained good conduct and discipline during their employment
+      Mr/Mrs <strong>{{ $employee->full_name }}</strong> maintained good conduct and discipline during his/her employment
       and adhered to company policies and guidelines.
-      We found them to be reliable, punctual, and committed to delivering quality work.
+      We found him/her to be reliable, punctual, and committed to delivering quality work.
   </p>
 
   @if(isset($letter->last_drawn_salary))
@@ -474,7 +474,7 @@ body{
   <p>
       We sincerely appreciate their contribution to
       <strong>{{ $company->name ?? 'the organization' }}</strong>
-      and wish them continued success in all their future professional endeavors.
+      and wish him/her continued success in all their future professional endeavors.
   </p>
 
   <div class="signature">
