@@ -58,6 +58,42 @@
                                 <option value="{{ $branch->id }}">{{ $branch->title }}</option>
                             @endforeach
                         </select>
+                    <label for="">Employee Type</label>
+                    <select class="form-control mb-2" name="employee_type" id="employee_type">
+                        <option value="">Select Employee Type</option>
+                        <option value="Permanent" {{ old('employee_type', $employee->employee_type ?? '') == 'Permanent' ? 'selected' : '' }}>Permanent</option>
+                        <option value="Probation" {{ old('employee_type', $employee->employee_type ?? '') == 'Probation' ? 'selected' : '' }}>Probation period</option>
+                        <option value="Intern" {{ old('employee_type', $employee->employee_type ?? '') == 'Intern' ? 'selected' : '' }}>Intern</option>
+                        <option value="Contract" {{ old('employee_type', $employee->employee_type ?? '') == 'Contract' ? 'selected' : '' }}>Contract</option>
+                    </select>
+
+                    <div id="employee_duration_section" style="display: none;">
+                        <input 
+                            type="number" 
+                            class="form-control mb-2" 
+                            name="employee_duration_months" 
+                            placeholder="Duration (in months)"
+                            value="{{ old('employee_duration_months', $employee->employee_duration_months ?? '') }}"
+                        >
+                    </div>
+                    <script>
+                        const employeeType = document.getElementById('employee_type');
+                        const durationSection = document.getElementById('employee_duration_section');
+
+                        function toggleDurationField() {
+                            if (employeeType.value && employeeType.value !== 'Permanent') {
+                                durationSection.style.display = 'block';
+                            } else {
+                                durationSection.style.display = 'none';
+                            }
+                        }
+
+                        employeeType.addEventListener('change', toggleDurationField);
+
+                        // Page load par bhi check kare (edit blade ke liye)
+                        toggleDurationField();
+                    </script>
+
                 </div>
             </div>
         </div>
@@ -153,6 +189,39 @@
                         <input type="number" class="form-control mb-2" id="deductions" name="deductions" placeholder="Deductions">
                         <input type="number" class="form-control mb-2" id="net_salary" name="net_salary" placeholder="Net Salary" readonly>
                     </div>
+                </div>
+            </div>
+            <div class="col-lg-4 mb-4">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-secondary text-white">Additional Details</div>
+                    <div class="card-body">
+                        <label>Date of Birth</label>
+                        <input 
+                            type="date" 
+                            class="form-control mb-2" 
+                            name="date_of_birth"
+                            value="{{ old('date_of_birth', $employee->date_of_birth ?? '') }}"
+                        >
+
+                        <label>Anniversary Date</label>
+                        <input 
+                            type="date" 
+                            class="form-control mb-2" 
+                            name="anniversary_date"
+                            value="{{ old('anniversary_date', $employee->anniversary_date ?? '') }}"
+                        >
+                        @if($isAdmin)
+                        <label>Special Terms</label>
+                        <textarea 
+                            class="form-control mb-2" 
+                            name="special_terms" 
+                            rows="3"
+                            placeholder="Enter any special terms or conditions"
+                        >{{ old('special_terms', $employee->special_terms ?? '') }}</textarea>
+                    @endif
+                    </div>
+
+
                 </div>
             </div>
 

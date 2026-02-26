@@ -19,6 +19,8 @@ class Branch extends Model implements HasMedia
 
     protected $appends = [
         'branch_image',
+        'signature_image',
+        'stamp_image',
     ];
 
     protected $dates = [
@@ -29,22 +31,30 @@ class Branch extends Model implements HasMedia
 
     protected $fillable = [
         'title',
-        'pincode',
-        'address_line',
+        'legal_name',
+        'incharge_name',
+        'email',
+        'phone',
+        'gst',
+        'pan',
+        'registration_number',
+        'address',
         'city',
         'state',
+        'pincode',
         'country',
         'latitude',
         'longitude',
-        'registration_detail',
-        'gst',
-        'pan',
-        'legal_name',
-        'incharge_name',
-      
-        'address',
     ];
+        public function getSignatureImageAttribute()
+    {
+        return $this->getSingleMedia('signature');
+    }
 
+    public function getStampImageAttribute()
+    {
+        return $this->getSingleMedia('stamp');
+    }
     protected function serializeDate(DateTimeInterface $date)
     {
         return $date->format('Y-m-d H:i:s');
@@ -71,6 +81,14 @@ class Branch extends Model implements HasMedia
 {
     return $this->hasMany(Employee::class);
 }
-
+    private function getSingleMedia($collection)
+    {
+        $file = $this->getMedia($collection)->last();
+        if ($file) {
+            $file->url = $file->getUrl();
+            $file->thumb = $file->getUrl('thumb');
+        }
+        return $file;
+    }
 
 }

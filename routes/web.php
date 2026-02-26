@@ -11,6 +11,7 @@ use App\Http\Controllers\OfficeBranchController;
 use App\Http\Controllers\Admin\SalaryStructureController;
 use App\Http\Controllers\Admin\TrackMemberController;
 use App\Http\Controllers\Admin\SalaryIncrementController;
+use App\Http\Controllers\Admin\UsersController;
 
 Route::redirect('/', '/login');
 Route::get('/home', function () {
@@ -80,7 +81,7 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.', 'namespace' => 'Admin', 'mi
     Route::get('admin/attendance-details/fetch-detail', [AttendanceDetailController::class, 'fetchDetail'])->name('admin.attendance-details.fetchDetail');
     Route::get('attendance-details/summary', [AttendanceDetailController::class, 'summary'])
      ->name('summary');
-
+    
     // 🟩 Resource Route
     Route::resource('attendance-details', AttendanceDetailController::class);
 
@@ -166,9 +167,21 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.', 'namespace' => 'Admin', 'mi
     Route::get('employees/{employee}', [EmployeeController::class, 'show'])->name('employees.show');
     Route::match(['get', 'post'], '/employees/{employee}/download-pdf', [EmployeeController::class, 'downloadPdf'])
     ->name('employees.downloadPdf');
-    Route::get('employees/offer-letter', [App\Http\Controllers\Admin\EmployeeController::class, 'offerLetter'])
-    ->name('employees.offer-letter');
-    
+    // Route::get('employees/offer-letter', [App\Http\Controllers\Admin\EmployeeController::class, 'offerLetter'])
+    // ->name('employees.offer-letter');
+    Route::get('employees/offer-letter/{employee}', [EmployeeController::class, 'offerLetterView'])
+        ->name('employees.offerLetter');
+
+        Route::get('employees/{employee}/terms-status', [UsersController::class, 'termsStatus'])
+        ->name('employees.termsStatus');
+
+    Route::post('employees/save-photo', [UsersController::class, 'savePhoto'])
+        ->name('employees.savePhoto');
+
+    Route::post('employees/save-signature', [UsersController::class, 'saveSignature'])
+        ->name('employees.saveSignature');
+
+
     //payroll adjustment
     Route::resource('payroll-adjustments', 'PayrollAdjustmentController');
     Route::get('payroll/{id}/salary-details', [PayrollController::class, 'getSalaryDetails']);
@@ -177,16 +190,32 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.', 'namespace' => 'Admin', 'mi
     Route::put('payrolls/manual-adjust/{payrollId}', [PayrollController::class, 'manualAdjustmentUpdate'])->name('payrolls.manualAdjust');
 
     Route::get('payrolls/download/{format}', [PayrollController::class, 'downloadPayrollPdf'])->name('payrolls.download');
+    
 
+    Route::get('payroll', [PayrollController::class, 'index'])
+        ->name('payroll.index');
 
-    Route::get('payroll', [PayrollController::class, 'index'])->name('payroll.index');
-    Route::post('payroll/generate', [PayrollController::class, 'generate'])->name('payroll.generate');
-    Route::get('payroll/list', [PayrollController::class, 'list'])->name('payroll.list');
+    Route::post('payroll/generate', [PayrollController::class, 'generate'])
+        ->name('payroll.generate');
+
+    Route::post('payroll/verify-master', [PayrollController::class, 'verifyMasterPassword'])
+        ->name('payroll.verifyMaster');
+
+    Route::get('payroll/list', [PayrollController::class, 'list'])
+        ->name('payroll.list');
+
     Route::get('employees/{id}/salary-details', [PayrollController::class, 'getSalaryDetails']);
-    Route::get('payrolls/download', [PayrollController::class, 'download'])->name('admin.payrolls.download');
-    Route::get('payrolls/details', [App\Http\Controllers\Admin\PayrollController::class, 'details'])
-    ->name('payrolls.details');
 
+    Route::get('payrolls/download', [PayrollController::class, 'download'])
+        ->name('payrolls.download');
+
+    Route::get('payrolls/details', [PayrollController::class, 'details'])
+        ->name('payrolls.details');
+
+ 
+
+
+    
     // Leave Request
 
     // monthly attendence report 

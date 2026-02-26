@@ -11,6 +11,7 @@ use ZipArchive;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\Response;
 use PDF;
 use Illuminate\Support\Facades\File;
@@ -54,16 +55,26 @@ public function create()
 
 public function store(Request $request)
 {
-    
+    $isAdmin = auth()->user()->roles()->where('title', 'Admin')->exists();
+
     $validated = $request->validate([
         'user_id' => 'nullable|exists:users,id',
-        'branch_id' => 'required', // ✅ Add this
+        'branch_id' => 'required',
         'employee_code' => 'required|unique:employees,employee_code',
         'full_name' => 'required|string|max:255',
         'email' => 'nullable|email',
         'phone' => 'nullable|string|max:20',
 
-        // Bank Details
+        // Employee Type
+        'employee_type' => 'nullable|string|max:50',
+        'employee_duration_months' => 'nullable|integer|min:1',
+
+        // Additional Details
+        'date_of_birth' => 'nullable|date',
+        'anniversary_date' => 'nullable|date',
+        'special_terms' => 'nullable|string',
+
+        // Bank
         'ifsc_code' => 'nullable|string|max:20',
         'bank_name' => 'nullable|string|max:100',
         'bank_address' => 'nullable|string|max:255',
@@ -72,7 +83,7 @@ public function store(Request $request)
         'aadhaar_number' => 'nullable|string|max:20',
         'payment_mode' => 'nullable|string|max:20',
 
-        // Work Timing
+        // Work
         'work_start_time' => 'nullable',
         'work_end_time' => 'nullable',
         'working_hours' => 'nullable|string|max:10',
@@ -80,86 +91,247 @@ public function store(Request $request)
         'attendance_source' => 'nullable|string|max:20',
         'attendance_radius_meter' => 'nullable|numeric',
 
-        // Salary Info
+        // Salary
         'basic_salary' => 'nullable|numeric',
         'hra' => 'nullable|numeric',
-        'other_allowances' => 'nullable|numeric',
         'deductions' => 'nullable|numeric',
         'net_salary' => 'nullable|numeric',
+        'other_allowances_json' => 'nullable|json',
 
-        // Employment Info
+        // Employment
         'date_of_joining' => 'nullable|date',
         'position' => 'nullable|string|max:100',
         'department' => 'nullable|string|max:100',
         'reporting_to' => 'nullable|exists:users,id',
         'status' => 'nullable|string|max:20',
-        'other_allowances_json' => 'nullable|json',
 
-        // File Uploads
-        'profile_photo'    => 'nullable|file|mimes:jpg,jpeg,png,pdf,webp,svg,gif|max:5120',
-        'signature_image'  => 'nullable|file|mimes:jpg,jpeg,png,pdf,webp,svg,gif|max:5120',
-        'cv'               => 'nullable|file|mimes:jpg,jpeg,png,pdf,webp,svg,gif|max:5120',
-        'offer_letter'     => 'nullable|file|mimes:jpg,jpeg,png,pdf,webp,svg,gif|max:5120',
-        'aadhaar_front'    => 'nullable|file|mimes:jpg,jpeg,png,pdf,webp,svg,gif|max:5120',
-        'aadhaar_back'     => 'nullable|file|mimes:jpg,jpeg,png,pdf,webp,svg,gif|max:5120',
-        'pan_card'         => 'nullable|file|mimes:jpg,jpeg,png,pdf,webp,svg,gif|max:5120',
-        'marksheet'        => 'nullable|file|mimes:jpg,jpeg,png,pdf,webp,svg,gif|max:5120',
-        'certificate'      => 'nullable|file|mimes:jpg,jpeg,png,pdf,webp,svg,gif|max:5120',
-        'passbook'         => 'nullable|file|mimes:jpg,jpeg,png,pdf,webp,svg,gif|max:5120',
-        'photo'            => 'nullable|file|mimes:jpg,jpeg,png,pdf,webp,svg,gif|max:5120',
-        'other_document'   => 'nullable|file|mimes:jpg,jpeg,png,pdf,webp,svg,gif|max:5120',
-        'signature'        => 'nullable|file|mimes:jpg,jpeg,png,pdf,webp,svg,gif|max:5120',
-        'experience_letter'=> 'nullable|file|mimes:jpg,jpeg,png,pdf,webp,svg,gif|max:5120',
-        'document_verified'=> 'pending',
-        'company_id'       => 'nullable',
-        
+        // Files
+        'profile_photo' => 'nullable|file|max:5120',
+        'signature_image' => 'nullable|file|max:5120',
+        'cv' => 'nullable|file|max:5120',
+        'offer_letter' => 'nullable|file|max:5120',
+        'aadhaar_front' => 'nullable|file|max:5120',
+        'aadhaar_back' => 'nullable|file|max:5120',
+        'pan_card' => 'nullable|file|max:5120',
+        'marksheet' => 'nullable|file|max:5120',
+        'certificate' => 'nullable|file|max:5120',
+        'passbook' => 'nullable|file|max:5120',
+        'photo' => 'nullable|file|max:5120',
+        'other_document' => 'nullable|file|max:5120',
+        'signature' => 'nullable|file|max:5120',
+        'experience_letter' => 'nullable|file|max:5120',
     ]);
 
-    // Step 1: Extract only non-file fields and create employee first
-    $fileFields = [
-        'profile_photo', 'signature_image', 'cv', 'offer_letter', 'aadhaar_front',
-        'aadhaar_back', 'pan_card', 'marksheet', 'certificate', 'passbook',
-        'photo', 'other_document', 'signature', 'experience_letter','document_verified','company_id'
+    /* ✅ Employee Type Logic */
+    if ($validated['employee_type'] === 'Permanent') {
+        $validated['employee_duration_months'] = null;
+    }
+
+    /* ✅ Allowances */
+    $allowanceFields = [
+        'travel_allowance', 'meal_allowance', 'uniform_allowance',
+        'medical_allowance', 'housing_allowance', 'transport_allowance', 'special_allowance'
     ];
 
-    $employeeData = collect($validated)->except($fileFields)->toArray();
-   // 🎯 Step 1.1: Handle Allowances
-$allowanceFields = [
-    'travel_allowance', 'meal_allowance', 'uniform_allowance', 
-    'medical_allowance', 'housing_allowance', 'transport_allowance', 'special_allowance'
-];
+    $allowances = [];
+    foreach ($allowanceFields as $field) {
+        $allowances[$field] = $request->input($field, 0);
+    }
 
-$allowancesData = [];
-foreach ($allowanceFields as $field) {
-    $allowancesData[$field] = $request->input($field, 0);
-}
+    $validated['other_allowances_json'] = json_encode($allowances);
+    $validated['other_allowances'] = array_sum($allowances);
 
-// Total allowances
-$totalAllowances = array_sum($allowancesData);
+    /* ✅ Admin-only field */
+    if (!$isAdmin) {
+        unset($validated['special_terms']);
+    }
 
-// JSON & Total add in array
-$employeeData['other_allowances_json'] = json_encode($allowancesData);
-$employeeData['other_allowances'] = $totalAllowances;
+    $validated['company_id'] = $request->branch_id;
+    $validated['document_verified'] = 'pending';
 
-$employeeData['document_verified'] = $request->input('document_verified', null);
-$employeeData['company_id'] = $request->input('branch_id', null);
-    $employee = Employee::create($employeeData); // ID generated here
-    
-    // Step 2: Handle file uploads and update employee
+    $employee = Employee::create($validated);
+
+    /* ✅ File Uploads */
+    $fileFields = [
+        'profile_photo','signature_image','cv','offer_letter','aadhaar_front',
+        'aadhaar_back','pan_card','marksheet','certificate','passbook',
+        'photo','other_document','signature','experience_letter'
+    ];
+
     foreach ($fileFields as $field) {
         if ($request->hasFile($field)) {
             $file = $request->file($field);
-            $filename = $field . '_' . time() . '_' . preg_replace('/\s+/', '_', $file->getClientOriginalName());
-            $folder = "uploads/employees/{$employee->id}";
-            $path = $file->storeAs($folder, $filename, 'public');
+            $filename = $field.'_'.time().'_'.$file->getClientOriginalName();
+            $path = $file->storeAs("uploads/employees/{$employee->id}", $filename, 'public');
             $employee->{$field} = $path;
         }
     }
 
     $employee->save();
 
-    return redirect()->route('admin.employees.index')->with('success', 'Employee created successfully.');
+    return redirect()->route('admin.employees.index')
+        ->with('success', 'Employee created successfully.');
 }
+public function update(Request $request, Employee $employee)
+{
+    $isAdmin = auth()->user()->roles()->where('title', 'Admin')->exists();
+
+    $validated = $request->validate([
+        'user_id' => 'required|exists:users,id',
+        'full_name' => 'required|string|max:255',
+        'email' => 'nullable|email',
+        'phone' => 'nullable|string|max:20',
+        'branch_id' => 'required',
+
+        // Employee Type
+        'employee_type' => 'nullable|string|max:50',
+        'employee_duration_months' => 'nullable|integer|min:1',
+
+        // Additional
+        'date_of_birth' => 'nullable|date',
+        'anniversary_date' => 'nullable|date',
+        'special_terms' => 'nullable|string',
+
+        // Salary
+        'basic_salary' => 'nullable|numeric',
+        'hra' => 'nullable|numeric',
+        'deductions' => 'nullable|numeric',
+        'net_salary' => 'nullable|numeric',
+        'other_allowances_json' => 'nullable|json',
+
+        // Employment
+        'date_of_joining' => 'nullable|date',
+        'position' => 'nullable|string|max:100',
+        'department' => 'nullable|string|max:100',
+        'reporting_to' => 'nullable|exists:users,id',
+        'status' => 'nullable|string|max:50',
+
+        // Files
+        'profile_photo' => 'nullable|file|max:5120',
+        'signature_image' => 'nullable|file|max:5120',
+        'cv' => 'nullable|file|max:5120',
+        'offer_letter' => 'nullable|file|max:5120',
+        'aadhaar_front' => 'nullable|file|max:5120',
+        'aadhaar_back' => 'nullable|file|max:5120',
+        'pan_card' => 'nullable|file|max:5120',
+        'marksheet' => 'nullable|file|max:5120',
+        'certificate' => 'nullable|file|max:5120',
+        'passbook' => 'nullable|file|max:5120',
+        'photo' => 'nullable|file|max:5120',
+        'other_document' => 'nullable|file|max:5120',
+        'signature' => 'nullable|file|max:5120',
+        'experience_letter' => 'nullable|file|max:5120',
+    ]);
+
+    /* ✅ Employee Type Logic */
+    if ($validated['employee_type'] === 'Permanent') {
+        $validated['employee_duration_months'] = null;
+    }
+
+    /* ✅ Allowances */
+    if ($request->filled('other_allowances_json')) {
+        $json = json_decode($request->other_allowances_json, true);
+        $validated['other_allowances'] = array_sum($json);
+        $validated['other_allowances_json'] = json_encode($json);
+    }
+
+    /* ✅ Admin-only */
+    if (!$isAdmin) {
+        unset($validated['special_terms']);
+    }
+
+    /* ✅ Files */
+    $fileFields = [
+        'profile_photo','signature_image','cv','offer_letter','aadhaar_front',
+        'aadhaar_back','pan_card','marksheet','certificate','passbook',
+        'photo','other_document','signature','experience_letter'
+    ];
+
+    foreach ($fileFields as $field) {
+        if ($request->hasFile($field)) {
+            if ($employee->{$field}) {
+                Storage::disk('public')->delete($employee->{$field});
+            }
+
+            $file = $request->file($field);
+            $filename = $field.'_'.time().'_'.$file->getClientOriginalName();
+            $validated[$field] = $file->storeAs(
+                "uploads/employees/{$employee->id}", 
+                $filename, 
+                'public'
+            );
+        }
+    }
+
+    $validated['company_id'] = $request->branch_id;
+
+    $employee->update($validated);
+
+    return redirect()->back()
+        ->with('success', 'Employee updated successfully.');
+}
+
+
+public function offerLetterView(Employee $employee)
+{
+    /* =========================
+       USER FETCH
+    ========================= */
+    $user = User::findOrFail($employee->user_id);
+
+    /* =========================
+       TERMS STATUS
+    ========================= */
+    $termsAccepted = (bool) $user->terms_accepted;
+
+    /* =========================
+       USER MEDIA (Spatie)
+    ========================= */
+    $acceptImage = $user->getFirstMedia('accept_image'); // camera photo
+    $signImage   = $user->getFirstMedia('sign_image');   // signature
+
+    /* =========================
+       USER PROFILE IMAGE (if any)
+    ========================= */
+    $userImage = $user->getFirstMedia('image');
+
+    /* =========================
+       COMPANY / BRANCH
+    ========================= */
+    $company = Branch::find($employee->company_id);
+
+    /* =========================
+       EMPLOYEE DOCUMENTS
+    ========================= */
+    $documents = [
+        'profile_photo'     => $employee->profile_photo,
+        'signature_image'   => $employee->signature_image,
+        'cv'                => $employee->cv,
+        'offer_letter'      => $employee->offer_letter,
+        'aadhaar_front'     => $employee->aadhaar_front,
+        'aadhaar_back'      => $employee->aadhaar_back,
+        'pan_card'          => $employee->pan_card,
+        'marksheet'         => $employee->marksheet,
+        'certificate'       => $employee->certificate,
+        'passbook'          => $employee->passbook,
+        'photo'             => $employee->photo,
+        'other_document'    => $employee->other_document,
+        'signature'         => $employee->signature,
+        'experience_letter' => $employee->experience_letter,
+    ];
+
+    return view('admin.offerletters.document', compact(
+        'employee',
+        'user',
+        'termsAccepted',
+        'acceptImage',
+        'signImage',
+        'userImage',
+        'company',
+        'documents'
+    ));
+}
+
 
 
 public function show(Employee $employee)
@@ -200,101 +372,6 @@ public function edit(Employee $employee)
         'isAdmin'
     ));
 }
-
-
-public function update(Request $request, Employee $employee)
-{
-    
-    $validated = $request->validate([
-        'user_id' => 'required|exists:users,id',
-        'employee_code' => 'nullable|string|max:255',
-        'full_name' => 'required|string|max:255',
-        'email' => 'nullable|email',
-        'phone' => 'nullable|string|max:20',
-        'bank_name' => 'nullable|string|max:255',
-        'account_number' => 'nullable|string|max:50',
-        'ifsc_code' => 'nullable|string|max:20',
-        'pan_number' => 'nullable|string|max:20',
-        'aadhaar_number' => 'nullable|string|max:20',
-        'payment_mode' => 'nullable|string|max:100',
-        'work_start_time' => 'nullable|date_format:H:i:s',
-        'work_end_time' => 'nullable|date_format:H:i:s',
-        'working_hours' => 'nullable|string|max:50',
-        'weekly_off_day' => 'nullable|string|max:50',
-        'attendance_source' => 'nullable|string|max:100',
-        'attendance_radius_meter' => 'nullable|numeric|min:0',
-        'basic_salary' => 'nullable|numeric',
-        'hra' => 'nullable|numeric',
-        'other_allowances' => 'nullable|numeric',
-        'other_allowances_json' => 'nullable|string', // ✅ added
-        'deductions' => 'nullable|numeric',
-        'net_salary' => 'nullable|numeric',
-        'date_of_joining' => 'nullable|date',
-        'position' => 'nullable|string|max:100',
-        'department' => 'nullable|string|max:100',
-        'reporting_to' => 'nullable|exists:users,id',
-        'status' => 'nullable|string|max:50',
-        'branch_id' => 'required',
-
-        // File validations
-        'profile_photo' => 'nullable|file|mimes:jpg,jpeg,png,pdf,webp|max:5120',
-        'signature_image' => 'nullable|file|mimes:jpg,jpeg,png,pdf,webp|max:5120',
-        'cv' => 'nullable|file|mimes:jpg,jpeg,png,pdf,webp|max:5120',
-        'offer_letter' => 'nullable|file|mimes:jpg,jpeg,png,pdf,webp|max:5120',
-        'aadhaar_front' => 'nullable|file|mimes:jpg,jpeg,png,pdf,webp|max:5120',
-        'aadhaar_back' => 'nullable|file|mimes:jpg,jpeg,png,pdf,webp|max:5120',
-        'pan_card' => 'nullable|file|mimes:jpg,jpeg,png,pdf,webp|max:5120',
-        'marksheet' => 'nullable|file|mimes:jpg,jpeg,png,pdf,webp|max:5120',
-        'certificate' => 'nullable|file|mimes:jpg,jpeg,png,pdf,webp|max:5120',
-        'passbook' => 'nullable|file|mimes:jpg,jpeg,png,pdf,webp|max:5120',
-        'photo' => 'nullable|file|mimes:jpg,jpeg,png,pdf,webp|max:5120',
-        'other_document' => 'nullable|file|mimes:jpg,jpeg,png,pdf,webp|max:5120',
-        'signature' => 'nullable|file|mimes:jpg,jpeg,png,pdf,webp|max:5120',
-        'exprience_letter' => 'nullable|file|mimes:jpg,jpeg,png,pdf,webp|max:5120',
-        'document_verified' => 'nullable',
-    ]);
-
-    /* ✅ Handle Allowances JSON */
-    if ($request->filled('other_allowances_json')) {
-        $json = json_decode($request->other_allowances_json, true);
-
-        if (is_array($json)) {
-            // Calculate total of all allowances
-            $totalAllowances = array_sum(array_map('floatval', $json));
-
-            $validated['other_allowances_json'] = json_encode($json, JSON_UNESCAPED_UNICODE);
-            $validated['other_allowances'] = $totalAllowances;
-        }
-    }
-
-    /* ✅ Handle file uploads */
-    $fileFields = [
-        'profile_photo', 'signature_image', 'cv', 'offer_letter', 'aadhaar_front',
-        'aadhaar_back', 'pan_card', 'marksheet', 'certificate', 'passbook',
-        'photo', 'other_document', 'signature', 'exprience_letter'
-    ];
-
-    foreach ($fileFields as $field) {
-        if ($request->hasFile($field)) {
-            // Delete old file if exists
-            if ($employee->{$field} && Storage::disk('public')->exists($employee->{$field})) {
-                Storage::disk('public')->delete($employee->{$field});
-            }
-
-            $file = $request->file($field);
-            $filename = $field . '_' . time() . '_' . preg_replace('/\s+/', '_', $file->getClientOriginalName());
-            $path = $file->storeAs('uploads/employees/' . $employee->id, $filename, 'public');
-            $validated[$field] = $path;
-        }
-    }
-    $validated['branch_id'] = $request->input('branch_id');
-    $validated['document_verified'] = $request->input('document_verified', $employee->document_verified);
-    /* ✅ Update employee */
-    $employee->update($validated);
-
-    return redirect()->back()->with('success', 'Employee updated successfully!');
-}
-
 
 
 
@@ -351,15 +428,7 @@ public function print(Employee $employee)
         return view('admin.payroll.print', compact('employee'));
     }
 
-    public function offerLetter()
-{
-    abort_if(Gate::denies('payroll_offer_letter'), Response::HTTP_FORBIDDEN, '403 Forbidden');
 
-    // Example: get all employees for dropdown
-    $employees = Employee::orderByDesc('id')->get();
-
-    return view('admin.payroll.offer', compact('employees'));
-}
 
 
 }

@@ -174,134 +174,261 @@
     </div>
 </div>
 
-<!-- Attendance Modal -->
-<div class="modal fade" id="attendanceModal" tabindex="-1" role="dialog" aria-labelledby="attendanceModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg" role="document">
-        <div class="modal-content">
-            <div class="modal-header bg-info text-white">
-                <h5 class="modal-title" id="attendanceModalLabel">Attendance Details</h5>
-                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
-                    <span aria-hidden="true">&times;</span>
+<!-- ================= ATTENDANCE MODAL ================= -->
+<div class="modal fade" id="attendanceModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content shadow-lg rounded-4 border-0">
+
+            <!-- ================= HEADER ================= -->
+            <div class="modal-header bg-info text-white rounded-top-4">
+                <h5 class="modal-title fw-bold">📅 Attendance Management</h5>
+                <button type="button" class="close text-white" data-dismiss="modal">
+                    <span>&times;</span>
                 </button>
             </div>
 
             @if(auth()->user()->is_admin)
-            <div class="modal-footer">
-                <div class="form-inline w-100 justify-content-between">
-                    <select id="attendanceStatus" class="form-control" style="width: 200px;">
-                        <option value="">-- Change Status --</option>
-                        <option value="present">Present</option>
-                        <option value="absent">Absent</option>
-                        <option value="half_time">Half Time</option>
-                        <option value="leave">Leave</option>
-                        <option value="week_off">Week Off</option>
-                        <option value="holiday">Holiday</option>
-                        <option value="paid_leave">Paid Leave</option>
-                        <option value="late">Late</option>
-                    </select>
-                    <button id="saveStatusBtn" class="btn btn-success">Save</button>
+            <div class="modal-body">
+
+                <!-- ================= AUDIT INFO ================= -->
+                <div class="card mb-4 border-0 shadow-sm">
+                    <div class="card-header fw-bold bg-light">🔐 Audit Information</div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-3">
+                                <label>Changed By</label>
+                                <input class="form-control" id="changedBy"
+                                    value="{{ auth()->user()->name }}" readonly>
+                            </div>
+                            <div class="col-md-3">
+                                <label>IP Address</label>
+                                <input class="form-control" id="ipAddress"
+                                    value="{{ request()->ip() }}" readonly>
+                            </div>
+                            <div class="col-md-3">
+                                <label>Device</label>
+                                <input class="form-control" id="deviceName" readonly>
+                            </div>
+                            <div class="col-md-3">
+                                <label>Device UUID</label>
+                                <input class="form-control" id="deviceUID" readonly>
+                            </div>
+                        </div>
+                    </div>
                 </div>
+
+                <!-- ================= WORK TIME ================= -->
+                <div class="card mb-4 border-0 shadow-sm">
+                    <div class="card-header fw-bold bg-light">⏱ Work Timing</div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label>Work Start Time</label>
+                                <input class="form-control bg-light"
+                                    id="workStartTime"
+                                    value="{{ $work_start_time ?? '-' }}" readonly>
+                            </div>
+                            <div class="col-md-6">
+                                <label>Work End Time</label>
+                                <input class="form-control bg-light"
+                                    id="workEndTime"
+                                    value="{{ $work_end_time ?? '-' }}" readonly>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ================= LOCATION ================= -->
+                <div class="card mb-4 border-0 shadow-sm">
+                    <div class="card-header fw-bold bg-light">📍 Location Details</div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label>Latitude</label>
+                                <input class="form-control" id="latitude"
+                                    value="{{ $punchInLatitude ?? '' }}" readonly>
+                            </div>
+                            <div class="col-md-4">
+                                <label>Longitude</label>
+                                <input class="form-control" id="longitude"
+                                    value="{{ $punchInLongitude ?? '' }}" readonly>
+                            </div>
+                            <div class="col-md-4">
+                                <label>Full Address</label>
+                                <input class="form-control" id="fullAddress"
+                                    value="{{ $punchInLocation ?? '' }}" readonly>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ================= ATTENDANCE ACTION ================= -->
+                <div class="card mb-4 border-0 shadow-sm">
+                    <div class="card-header fw-bold bg-light">✅ Attendance Action</div>
+                    <div class="card-body">
+
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-6">
+                                <label>Attendance Status</label>
+                                <select id="attendanceStatusSelect" class="form-control">
+                                    @foreach(App\Models\AttendanceDetail::STATUS_SELECT as $k => $v)
+                                        <option value="{{ $k }}"
+                                            @selected(($attendanceDetail->status ?? null) === $k)
+                                        >
+                                            {{ $v }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label>Punch Type</label>
+                                <select id="punchTypeSelect" class="form-control">
+                                    <option value="in">Punch In</option>
+                                    <option value="out">Punch Out</option>
+                                    <option value="both">Punch In & Punch Out</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label>Punch In Image</label>
+                                <input type="file" id="punchInImage"
+                                    class="form-control" accept="image/*">
+                            </div>
+                            <div class="col-md-6">
+                                <label>Punch Out Image</label>
+                                <input type="file" id="punchOutImage"
+                                    class="form-control" accept="image/*">
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- ================= ACTION BUTTON ================= -->
+                <div class="text-end">
+                    <button id="openPasswordModal" class="btn btn-success px-4 py-2">
+                        💾 Save Attendance
+                    </button>
+                </div>
+                @php
+                    $hasPunchIn  = $hasPunchIn  ?? false;
+                    $hasPunchOut = $hasPunchOut ?? false;
+                @endphp
+
+                <!-- ================= FLAGS FOR JS LOGIC ================= -->
+                <input type="hidden" id="hasPunchIn"
+                    value="{{ $hasPunchIn ? 1 : 0 }}">
+                <input type="hidden" id="hasPunchOut"
+                    value="{{ $hasPunchOut ? 1 : 0 }}">
+
             </div>
             @endif
 
-            <div class="modal-body" id="attendanceModalBody">
-                <p>Loading...</p>
-            </div>
         </div>
     </div>
 </div>
-@endsection
 
+
+
+<!-- Master Password Modal -->
+<div class="modal fade" id="masterPasswordModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title">Confirm Master Password</h5>
+                <button type="button" class="close text-white" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <label><strong>Master Password</strong></label>
+                <input type="password" id="masterPassword" class="form-control" placeholder="Enter master password">
+            </div>
+
+            <div class="modal-footer">
+                <button id="confirmSaveAttendance" class="btn btn-success">
+                    Confirm & Save
+                </button>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+@endsection
 @section('scripts')
+
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@fullcalendar/google-calendar@5.11.3/main.min.js"></script>
 <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBgRXfXiK8KHfSnKtunSIpGpKNmLNGNUzM&libraries=places"></script>
 
 <script>
+/* ================= DEVICE UID ================= */
+function getDeviceUID() {
+    let uid = localStorage.getItem('device_uid');
+    if (!uid) {
+        uid = crypto.randomUUID();
+        localStorage.setItem('device_uid', uid);
+    }
+    return uid;
+}
+
+/* ================= LOCATION + ADDRESS ================= */
+function getLocationWithAddress(callback) {
+    if (!navigator.geolocation) {
+        callback(null);
+        return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+        pos => {
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+
+            const geocoder = new google.maps.Geocoder();
+            geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+                callback({
+                    lat,
+                    lng,
+                    address: (status === 'OK' && results[0]) ? results[0].formatted_address : ''
+                });
+            });
+        },
+        () => callback(null),
+        { enableHighAccuracy: true }
+    );
+}
+
 document.addEventListener('DOMContentLoaded', function () {
-    const calendarEl = document.getElementById('calendar');
+
+    /* ================= ELEMENTS ================= */
+    const attendanceModalBody = document.getElementById('attendanceModalBody');
+
+    const deviceUIDEl = document.getElementById('deviceUID');
+    const latitudeEl = document.getElementById('latitude');
+    const longitudeEl = document.getElementById('longitude');
+    const fullAddressEl = document.getElementById('fullAddress');
+
+    const workStartEl = document.getElementById('workStartTime');
+    const workEndEl = document.getElementById('workEndTime');
+
+    const punchTypeEl = document.getElementById('punchTypeSelect');
+    const statusEl = document.getElementById('attendanceStatusSelect');
+
+    /* ================= STATIC INFO ================= */
+    document.getElementById('ipAddress').value = '{{ request()->ip() }}';
+    document.getElementById('deviceName').value = navigator.userAgent;
+    deviceUIDEl.value = getDeviceUID();
+
+    /* ================= CALENDAR ================= */
     let selectedUserId = '{{ auth()->id() }}';
     let selectedDate = null;
 
-    // animate counter helper
-    function animateCounter(el, val) {
-        let c = 0;
-        let end = parseInt(val) || 0;
-        el.textContent = '0';
-        if (end <= 0) return;
-        let st = setInterval(() => {
-            c++;
-            if (c >= end) { c = end; clearInterval(st); }
-            el.textContent = c;
-        }, 20);
-    }
-
-    // summary calculation
-  function updateSummary(events) {
-
-    if (typeof calendar === 'undefined' || !calendar.view) return;
-
-    let view = calendar.view;
-    let monthStart = view.currentStart;
-    let monthEnd = view.currentEnd;
-
-    // summary counters
-    let s = { present:0, absent:0, half_time:0, leave:0, week_off:0, holiday:0 };
-
-    // map of holiday dates to avoid absent on holiday
-    let holidayDates = {};
-
-    events.forEach(e => {
-        const start = e.start || e.startStr;
-        if (!start) return;
-        let d = new Date(start);
-        if (d >= monthStart && d < monthEnd) {
-            
-            let type = (e.classNames && e.classNames[0]) ? e.classNames[0] : 'default';
-
-            // mark holiday date
-            if (type === 'holiday') {
-                holidayDates[start] = true;
-            }
-        }
-    });
-
-    // second pass — count events but skip absent when holiday exists
-    events.forEach(e => {
-        const start = e.start || e.startStr;
-        if (!start) return;
-        let d = new Date(start);
-
-        if (d >= monthStart && d < monthEnd) {
-
-            let type = (e.classNames && e.classNames[0]) ? e.classNames[0] : 'default';
-
-            // holiday exists → skip absent
-            if (holidayDates[start] && type === 'absent') {
-                return;
-            }
-
-            if (s[type] !== undefined) s[type]++;
-        }
-    });
-
-    const total = s.present + s.absent + s.half_time + s.leave + s.week_off + s.holiday;
-
-    animateCounter(document.getElementById("count-present"), s.present);
-    animateCounter(document.getElementById("count-absent"), s.absent);
-    animateCounter(document.getElementById("count-half_time"), s.half_time);
-    animateCounter(document.getElementById("count-leave"), s.leave);
-    animateCounter(document.getElementById("count-week_off"), s.week_off);
-    animateCounter(document.getElementById("count-holiday"), s.holiday);
-    animateCounter(document.getElementById("count-total"), total);
-
-    const summaryEl = document.getElementById("attendanceSummary");
-    if (summaryEl) summaryEl.style.display = "flex";
-}
-
-
-    // initialize calendar
-    const calendar = new FullCalendar.Calendar(calendarEl, {
+    const calendar = new FullCalendar.Calendar(document.getElementById('calendar'), {
         initialView: 'dayGridMonth',
         height: 650,
         headerToolbar: {
@@ -309,134 +436,113 @@ document.addEventListener('DOMContentLoaded', function () {
             center: 'title',
             right: 'dayGridMonth,timeGridWeek'
         },
-        displayOtherMonths: false,
-        showNonCurrentDates: false,
-        events: function(fetchInfo, successCallback, failureCallback) {
-            const url = `{{ route('admin.attendance-details.calendarData', ['user' => '__USER_ID__']) }}`.replace('__USER_ID__', selectedUserId);
-            fetch(url)
+        events: function (fetchInfo, successCallback) {
+            fetch(`{{ route('admin.attendance-details.calendarData', ['user' => '__USER_ID__']) }}`
+                .replace('__USER_ID__', selectedUserId))
                 .then(res => res.json())
-                .then(events => {
-                    successCallback(events);
-                    // update summary whenever events load
-                    try { updateSummary(events); } catch (e) { console.error("updateSummary error", e); }
-                })
-                .catch(err => {
-                    console.error("Events fetch error", err);
-                    failureCallback(err);
-                });
+                .then(successCallback);
         },
-        datesSet: function() {
-            // when month changes, refetch events (and summary will update on load)
-            calendar.refetchEvents();
-        },
-        eventClick: function(info) {
+        eventClick(info) {
             selectedDate = info.event.startStr;
-            if (info.event.classNames.includes('holiday')) {
-                const props = info.event.extendedProps;
-                document.getElementById('modalHolidayType').textContent = props.holiday_type || 'N/A';
-                document.getElementById('modalIsOptional').textContent = props.is_optional ? 'Yes' : 'No';
-                document.getElementById('modalIsNational').textContent = props.is_national ? 'Yes' : 'No';
-                document.getElementById('modalDescription').textContent = props.description || 'N/A';
-                $('#holidayModal').modal('show');
-            } else {
-                const url = `admin/attendance-details/fetch-detail?user_id=${selectedUserId}&date=${selectedDate}`;
-                fetch(url)
-                    .then(res => res.text())
-                    .then(data => {
-                        $('#attendanceModalBody').html(data);
-                        $('#attendanceModal').modal('show');
-                    })
-                    .catch(err => console.error("Attendance detail fetch error", err));
-            }
+            loadAttendanceDetail();
         }
     });
 
     calendar.render();
 
-    // save status button
-    document.getElementById('saveStatusBtn')?.addEventListener('click', function () {
-        const newStatus = document.getElementById('attendanceStatus').value;
-        if (!newStatus) { alert("⚠ Please select a status first!"); return; }
-        if (!selectedDate) { alert("⚠ Please select a date first!"); return; }
+    /* ================= LOAD MODAL DATA ================= */
+    function loadAttendanceDetail() {
 
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(function(position) {
-                const lat = position.coords.latitude;
-                const lng = position.coords.longitude;
-
-                // reverse geocode if google available
-                function sendPayload(address) {
-                    const payload = {
-                        user_id: selectedUserId,
-                        date: selectedDate,
-                        status: newStatus,
-                        punch_in_latitude: lat,
-                        punch_in_longitude: lng,
-                        punch_out_latitude: lat,
-                        punch_out_longitude: lng,
-                        punch_in_location: address,
-                        punch_out_location: address
-                    };
-
-                    fetch(`{{ route('admin.attendance-details.updateStatus') }}`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                        },
-                        body: JSON.stringify(payload)
-                    })
-                    .then(async res => {
-                        const text = await res.text();
-                        try {
-                            const response = JSON.parse(text);
-                            if (response.success) {
-                                alert('✅ Attendance status updated successfully!');
-                                $('#attendanceModal').modal('hide');
-                                calendar.refetchEvents();
-                            } else {
-                                alert('❌ Failed to update attendance: ' + (response.message || 'Unknown error'));
-                            }
-                        } catch (e) {
-                            console.error("JSON parse error:", e, text);
-                            alert("⚠ Server did not return valid JSON. Check console/logs.");
-                        }
-                    })
-                    .catch(err => { console.error("Fetch error:", err); alert('⚠ Something went wrong! Check console.'); });
-                }
-
-                if (window.google && google.maps && google.maps.Geocoder) {
-                    const geocoder = new google.maps.Geocoder();
-                    geocoder.geocode({ location: { lat: lat, lng: lng } }, (results, status) => {
-                        if (status === "OK" && results[0]) {
-                            sendPayload(results[0].formatted_address);
-                        } else {
-                            sendPayload("Unknown Location");
-                        }
-                    });
-                } else {
-                    // google maps not available — send without resolved address
-                    sendPayload("Unknown Location");
-                }
-
-            }, function(err) {
-                console.error("Geolocation error:", err);
-                alert('⚠ Unable to get your location. Attendance update failed.');
+        // 1️⃣ Fetch attendance partial (HTML)
+        fetch(`admin/attendance-details/fetch-detail?user_id=${selectedUserId}&date=${selectedDate}`)
+            .then(res => res.text())
+            .then(html => {
+                attendanceModalBody.innerHTML = html;
+                $('#attendanceModal').modal('show');
             });
-        } else {
-            alert('⚠ Geolocation is not supported by your browser.');
+
+        // 2️⃣ Fetch employee work timing
+        fetch(`admin/employees/by-user/${selectedUserId}`)
+            .then(res => res.json())
+            .then(emp => {
+                workStartEl.value = emp.work_start_time ?? '-';
+                workEndEl.value = emp.work_end_time ?? '-';
+            });
+
+        // 3️⃣ Get current location
+        getLocationWithAddress(loc => {
+            if (!loc) return;
+            latitudeEl.value = loc.lat;
+            longitudeEl.value = loc.lng;
+            fullAddressEl.value = loc.address;
+        });
+
+        // 4️⃣ Reset punch logic
+        punchTypeEl.value = 'in';
+    }
+
+    /* ================= PUNCH LOGIC ================= */
+    punchTypeEl.addEventListener('change', () => {
+
+        const hasPunchIn = attendanceModalBody.querySelector('[data-has-punch-in]')?.value === '1';
+
+        if (punchTypeEl.value === 'out' && !hasPunchIn) {
+            alert('Punch In required before Punch Out');
+            punchTypeEl.value = 'in';
         }
     });
 
-    // user filter
-    const userSelect = document.getElementById('userSelect');
-    if (userSelect) {
-        userSelect.addEventListener('change', function () {
-            selectedUserId = this.value;
-            calendar.refetchEvents();
+    /* ================= SAVE ATTENDANCE ================= */
+    document.getElementById('confirmSaveAttendance').addEventListener('click', () => {
+
+        const masterPwd = document.getElementById('masterPassword').value;
+        if (!masterPwd) return alert('Master password required');
+
+        const fd = new FormData();
+        fd.append('user_id', selectedUserId);
+        fd.append('date', selectedDate);
+        fd.append('status', statusEl.value);
+        fd.append('punch_type', punchTypeEl.value);
+        fd.append('changed_by', document.getElementById('changedBy').value);
+        fd.append('device_uid', deviceUIDEl.value);
+        fd.append('master_password', masterPwd);
+
+        fd.append('latitude', latitudeEl.value);
+        fd.append('longitude', longitudeEl.value);
+        fd.append('full_address', fullAddressEl.value);
+
+        if (document.getElementById('punchInImage').files[0]) {
+            fd.append('punch_in_image', document.getElementById('punchInImage').files[0]);
+        }
+
+        if (document.getElementById('punchOutImage').files[0]) {
+            fd.append('punch_out_image', document.getElementById('punchOutImage').files[0]);
+        }
+
+        fetch(`{{ route('admin.attendance-details.updateStatus') }}`, {
+            method: 'POST',
+            headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+            body: fd
+        })
+        .then(res => res.json())
+        .then(r => {
+            alert(r.message);
+            if (r.success) {
+                $('#masterPasswordModal').modal('hide');
+                $('#attendanceModal').modal('hide');
+                calendar.refetchEvents();
+            }
         });
-    }
+    });
+
+    /* ================= USER FILTER ================= */
+    document.getElementById('userSelect')?.addEventListener('change', function () {
+        selectedUserId = this.value;
+        calendar.refetchEvents();
+    });
 
 });
 </script>
+
+
 @endsection

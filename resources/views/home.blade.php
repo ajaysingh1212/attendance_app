@@ -3,8 +3,223 @@
 @section('styles')
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 @endsection
+<!-- Confetti / Fireworks -->
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+<!-- Firecracker Sound -->
+<audio id="fireSound" src="{{ asset('song/bd.mp3') }}" preload="auto"></audio>
 
 @section('content')
+@if(
+    (isset($birthdayEmployees) && $birthdayEmployees->count()) ||
+    (isset($anniversaryEmployees) && $anniversaryEmployees->count())
+)
+<div class="modal fade" id="celebrationModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content celebration-box text-center">
+            <div class="modal-body p-4">
+                <button id="enableSoundBtn" class="btn btn-sm btn-success d-none">
+                    🔊 Enable Celebration Sound
+                </button>
+
+                <div class="party-icons">🎉 🎈 🎊 🎆 💐</div>
+
+                {{-- 🎂 Birthdays --}}
+                @if($birthdayEmployees->count())
+                    <h4 class="mt-3">🎂 Happy Birthday 🎂</h4>
+                    <ul class="list-unstyled">
+                        @foreach($birthdayEmployees as $emp)
+                            <li class="celebration-item">
+                                🎉 <strong>{{ $emp->full_name }}</strong>
+                                <small class="text-muted">
+                                    ({{ $emp->department ?? 'Team Member' }})
+                                </small>
+                            </li>
+                        @endforeach
+                    </ul>
+                @endif
+
+                {{-- 💍 Anniversaries --}}
+                @if($anniversaryEmployees->count())
+                    <h4 class="mt-4">💍 Happy Work Anniversary 💍</h4>
+                    <ul class="list-unstyled">
+                        @foreach($anniversaryEmployees as $emp)
+                            <li class="celebration-item">
+                                🎊 <strong>{{ $emp->full_name }}</strong>
+                                <small class="text-muted">
+                                    ({{ $emp->department ?? 'Team Member' }})
+                                </small>
+                            </li>
+                        @endforeach
+                    </ul>
+                @endif
+
+                <button class="btn btn-primary mt-3" data-bs-dismiss="modal">
+                    🎉 Celebrate Together 🎉
+                </button>
+
+            </div>
+        </div>
+    </div>
+</div>
+@endif
+
+<style>
+    .celebration-box {
+    background: linear-gradient(135deg, #fde68a, #fca5a5, #93c5fd);
+    border-radius: 16px;
+    animation: popIn 0.6s ease;
+}
+
+@keyframes popIn {
+    from { transform: scale(0.7); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
+.party-icons {
+    font-size: 30px;
+    animation: float 2s infinite alternate;
+}
+
+@keyframes float {
+    from { transform: translateY(0); }
+    to { transform: translateY(-10px); }
+}
+
+.celebration-text {
+    font-size: 15px;
+    margin-top: 10px;
+    color: #1f2937;
+}
+
+.employee-name {
+    font-weight: bold;
+    color: #111827;
+}
+.celebration-box {
+    background: linear-gradient(135deg, #fde68a, #fca5a5, #93c5fd);
+    border-radius: 18px;
+    animation: popIn 0.6s ease;
+}
+
+.party-icons {
+    font-size: 34px;
+    animation: float 2s infinite alternate;
+}
+
+.celebration-item {
+    font-size: 15px;
+    margin: 6px 0;
+}
+
+@keyframes popIn {
+    from { transform: scale(0.7); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
+@keyframes float {
+    from { transform: translateY(0); }
+    to { transform: translateY(-10px); }
+}
+.balloon {
+    position: fixed;
+    bottom: -120px;
+    width: 60px;
+    height: 80px;
+    border-radius: 50%;
+    animation: flyUp 6s linear infinite;
+    z-index: 1055;
+    opacity: 0.9;
+}
+
+.balloon::after {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 40px;
+    background: #555;
+    left: 50%;
+    top: 80px;
+}
+
+@keyframes flyUp {
+    0% {
+        transform: translateY(0) translateX(0);
+        opacity: 1;
+    }
+    100% {
+        transform: translateY(-120vh) translateX(-30px);
+        opacity: 0;
+    }
+}
+
+</style>
+<script>
+function fireCrackers() {
+    const duration = 5 * 1000;
+    const end = Date.now() + duration;
+
+    (function frame() {
+        confetti({
+            particleCount: 10,
+            angle: 60,
+            spread: 80,
+            origin: { x: 0 }
+        });
+        confetti({
+            particleCount: 10,
+            angle: 120,
+            spread: 80,
+            origin: { x: 1 }
+        });
+        confetti({
+            particleCount: 12,
+            spread: 360,
+            origin: { x: 0.5, y: 0.3 }
+        });
+
+        if (Date.now() < end) {
+            requestAnimationFrame(frame);
+        }
+    })();
+}
+</script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const sound = document.getElementById('fireSound');
+    const btn = document.getElementById('enableSoundBtn');
+
+    btn.classList.remove('d-none');
+
+    btn.addEventListener('click', function () {
+        sound.volume = 0.7;
+        sound.play().then(() => {
+            btn.classList.add('d-none');
+        }).catch(err => {
+            console.log('Sound blocked:', err);
+        });
+    });
+});
+</script>
+
+<script>
+function launchBalloons() {
+    const colors = ['#ef4444', '#22c55e', '#3b82f6', '#eab308', '#ec4899'];
+
+    for (let i = 0; i < 15; i++) {
+        const balloon = document.createElement('div');
+        balloon.className = 'balloon';
+        balloon.style.left = Math.random() * 100 + 'vw';
+        balloon.style.background = colors[Math.floor(Math.random() * colors.length)];
+        balloon.style.animationDuration = (4 + Math.random() * 3) + 's';
+
+        document.body.appendChild(balloon);
+
+        setTimeout(() => balloon.remove(), 7000);
+    }
+}
+</script>
+
 <div class="content">
     <!-- User Dropdown -->
     <form method="GET" action="{{ route('admin.home') }}" id="userForm">
@@ -285,6 +500,35 @@
     @parent
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
+@if(
+    ($birthdayEmployees->count() ?? 0) ||
+    ($anniversaryEmployees->count() ?? 0)
+)
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    setTimeout(() => {
+        const modal = new bootstrap.Modal(
+            document.getElementById('celebrationModal')
+        );
+        modal.show();
+
+        // 🔊 Play firecracker sound
+        const sound = document.getElementById('fireSound');
+        sound.volume = 1;
+        sound.play().catch(() => {});
+
+        // 🎆 Fireworks
+        fireCrackers();
+
+        // 🎈 Balloons
+        launchBalloons();
+
+    }, 800);
+});
+</script>
+@endif
+
+
     <script>
         $(document).ready(function () {
             // Initialize Select2

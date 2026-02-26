@@ -20,59 +20,90 @@ class BranchController extends Controller
     use MediaUploadingTrait, CsvImportTrait;
 
     public function index(Request $request)
-    {
-        abort_if(Gate::denies('branch_access'), Response::HTTP_FORBIDDEN, '403 Forbidden');
+{
+    abort_if(Gate::denies('branch_access'), Response::HTTP_FORBIDDEN, '403 Forbidden');
 
-        if ($request->ajax()) {
-            $query = Branch::query()->select(sprintf('%s.*', (new Branch)->table));
-            $table = Datatables::of($query);
+    if ($request->ajax()) {
+        $query = Branch::query()->select(sprintf('%s.*', (new Branch)->table));
+        $table = Datatables::of($query);
 
-            $table->addColumn('placeholder', '&nbsp;');
-            $table->addColumn('actions', '&nbsp;');
+        $table->addColumn('placeholder', '&nbsp;');
+        $table->addColumn('actions', '&nbsp;');
 
-            $table->editColumn('actions', function ($row) {
-                $viewGate      = 'branch_show';
-                $editGate      = 'branch_edit';
-                $deleteGate    = 'branch_delete';
-                $crudRoutePart = 'branches';
+        /* ================= ACTIONS ================= */
+        $table->editColumn('actions', function ($row) {
+            $viewGate      = 'branch_show';
+            $editGate      = 'branch_edit';
+            $deleteGate    = 'branch_delete';
+            $crudRoutePart = 'branches';
 
-                return view('partials.datatablesActions', compact(
-                    'viewGate',
-                    'editGate',
-                    'deleteGate',
-                    'crudRoutePart',
-                    'row'
-                ));
-            });
+            return view('partials.datatablesActions', compact(
+                'viewGate',
+                'editGate',
+                'deleteGate',
+                'crudRoutePart',
+                'row'
+            ));
+        });
 
-            $table->editColumn('id', function ($row) {
-                return $row->id ? $row->id : '';
-            });
-            $table->editColumn('title', function ($row) {
-                return $row->title ? $row->title : '';
-            });
-            $table->editColumn('address', function ($row) {
-                return $row->address ? $row->address : '';
-            });
-            $table->editColumn('branch_image', function ($row) {
-                if ($photo = $row->branch_image) {
-                    return sprintf(
-                        '<a href="%s" target="_blank"><img src="%s" width="50px" height="50px"></a>',
-                        $photo->url,
-                        $photo->thumbnail
-                    );
-                }
+        /* ================= BASIC FIELDS ================= */
+        $table->editColumn('id', fn ($row) => $row->id ?? '');
+        $table->editColumn('title', fn ($row) => $row->title ?? '');
+        $table->editColumn('address', fn ($row) => $row->address ?? '');
+        $table->editColumn('legal_name', fn ($row) => $row->legal_name ?? '');
+        $table->editColumn('incharge_name', fn ($row) => $row->incharge_name ?? '');
+        $table->editColumn('email', fn ($row) => $row->email ?? '');
+        $table->editColumn('phone', fn ($row) => $row->phone ?? '');
+        $table->editColumn('gst', fn ($row) => $row->gst ?? '');
+        $table->editColumn('pan', fn ($row) => $row->pan ?? '');
+        $table->editColumn('registration_number', fn ($row) => $row->registration_number ?? '');
 
-                return '';
-            });
+        /* ================= IMAGES (MEDIA) ================= */
 
-            $table->rawColumns(['actions', 'placeholder', 'branch_image']);
+        // Branch Logo
+        $table->addColumn('branch_image', function ($row) {
+            if ($row->branch_image) {
+                return '<a href="'.$row->branch_image->url.'" target="_blank">
+                            <img src="'.$row->branch_image->thumbnail.'" width="50" height="50">
+                        </a>';
+            }
+            return '';
+        });
 
-            return $table->make(true);
-        }
+        // Signature Image
+        $table->addColumn('signature_image', function ($row) {
+            if ($row->signature_image) {
+                return '<a href="'.$row->signature_image->url.'" target="_blank">
+                            <img src="'.$row->signature_image->url.'" width="50" height="50">
+                        </a>';
+            }
+            return '';
+        });
 
-        return view('admin.branches.index');
+        // Stamp Image
+        $table->addColumn('stamp_image', function ($row) {
+            if ($row->stamp_image) {
+                return '<a href="'.$row->stamp_image->url.'" target="_blank">
+                            <img src="'.$row->stamp_image->url.'" width="50" height="50">
+                        </a>';
+            }
+            return '';
+        });
+
+        /* ================= RAW COLUMNS ================= */
+        $table->rawColumns([
+            'actions',
+            'placeholder',
+            'branch_image',
+            'signature_image',
+            'stamp_image'
+        ]);
+
+        return $table->make(true);
     }
+
+    return view('admin.branches.index');
+}
 
     public function create()
     {
@@ -81,21 +112,24 @@ class BranchController extends Controller
         return view('admin.branches.create');
     }
 
-    public function store(StoreBranchRequest $request)
-    {
-        
-        $branch = Branch::create($request->all());
+public function store(StoreBranchRequest $request)
+{
+    $branch = Branch::create($request->all());
 
-        if ($request->input('branch_image', false)) {
-            $branch->addMedia(storage_path('tmp/uploads/' . basename($request->input('branch_image'))))->toMediaCollection('branch_image');
-        }
-
-        if ($media = $request->input('ck-media', false)) {
-            Media::whereIn('id', $media)->update(['model_id' => $branch->id]);
-        }
-
-        return redirect()->route('admin.branches.index');
+    if ($request->hasFile('branch_image')) {
+        $branch->addMediaFromRequest('branch_image')->toMediaCollection('branch_image');
     }
+
+    if ($request->hasFile('signature')) {
+        $branch->addMediaFromRequest('signature')->toMediaCollection('signature');
+    }
+
+    if ($request->hasFile('stamp')) {
+        $branch->addMediaFromRequest('stamp')->toMediaCollection('stamp');
+    }
+
+    return redirect()->route('admin.branches.index')->with('success','Branch created');
+}
 
     public function edit(Branch $branch)
     {
@@ -104,23 +138,27 @@ class BranchController extends Controller
         return view('admin.branches.edit', compact('branch'));
     }
 
-    public function update(UpdateBranchRequest $request, Branch $branch)
-    {
-        $branch->update($request->all());
+public function update(UpdateBranchRequest $request, Branch $branch)
+{
+    $branch->update($request->all());
 
-        if ($request->input('branch_image', false)) {
-            if (! $branch->branch_image || $request->input('branch_image') !== $branch->branch_image->file_name) {
-                if ($branch->branch_image) {
-                    $branch->branch_image->delete();
-                }
-                $branch->addMedia(storage_path('tmp/uploads/' . basename($request->input('branch_image'))))->toMediaCollection('branch_image');
-            }
-        } elseif ($branch->branch_image) {
-            $branch->branch_image->delete();
-        }
-
-        return redirect()->route('admin.branches.index');
+    if ($request->hasFile('branch_image')) {
+        $branch->clearMediaCollection('branch_image');
+        $branch->addMediaFromRequest('branch_image')->toMediaCollection('branch_image');
     }
+
+    if ($request->hasFile('signature')) {
+        $branch->clearMediaCollection('signature');
+        $branch->addMediaFromRequest('signature')->toMediaCollection('signature');
+    }
+
+    if ($request->hasFile('stamp')) {
+        $branch->clearMediaCollection('stamp');
+        $branch->addMediaFromRequest('stamp')->toMediaCollection('stamp');
+    }
+
+    return redirect()->route('admin.branches.index')->with('success','Branch updated');
+}
 
     public function show(Branch $branch)
     {
