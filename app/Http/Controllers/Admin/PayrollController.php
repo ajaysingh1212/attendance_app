@@ -72,7 +72,8 @@ public function generate(Request $request)
 
     $month = $request->month;
     $year  = $request->year;
-        $alreadyGenerated = Payroll::where('month', $month)
+
+    $alreadyGenerated = Payroll::where('month', $month)
         ->where('year', $year)
         ->exists();
 
@@ -81,6 +82,7 @@ public function generate(Request $request)
             ->route('admin.payroll.index', compact('month', 'year'))
             ->with('warning', '⚠ Payroll already generated. Master password required.');
     }
+
     $start = Carbon::create($year, $month, 1)->startOfMonth();
     $end   = Carbon::create($year, $month, 1)->endOfMonth();
     $daysInMonth = $start->daysInMonth;
@@ -110,7 +112,9 @@ public function generate(Request $request)
     $holidayDates = array_values(array_unique($holidayDates));
 
     $employees = Employee::all();
-    $payrollMonth = Carbon::create($year, $month, 1)->format('Y-m');
+
+    // 🔥 Proper DATE object instead of string comparison
+    $payrollDate = Carbon::create($year, $month, 1)->startOfMonth();
 
     foreach ($employees as $employee) {
 
@@ -128,16 +132,16 @@ public function generate(Request $request)
         $remarks = 'Salary processed successfully for this month.';
 
         /* =================================================
-           SALARY INCREMENT (if applicable)
+           SALARY INCREMENT (FIXED LOGIC)
         ================================================= */
         $increment = SalaryIncrement::where('employee_id', $employee->id)
             ->whereRaw("LOWER(TRIM(status)) = 'approved'")
-            ->whereRaw("TRIM(increment_month) <= ?", [$payrollMonth])
-            ->orderByRaw("TRIM(increment_month) DESC")
+            ->whereRaw("STR_TO_DATE(TRIM(increment_month), '%Y-%m') <= ?", [$payrollDate->format('Y-m-01')])
+            ->orderByRaw("STR_TO_DATE(TRIM(increment_month), '%Y-%m') DESC")
             ->first();
 
         if ($increment) {
-            // 🔥 overwrite salary parts ONLY if increment exists
+
             $oldGross = $increment->old_gross_salary;
             $newGross = $increment->new_gross_salary;
 
@@ -263,7 +267,6 @@ public function generate(Request $request)
                 'final_paid_days' => $finalPaidDays,
                 'total_days' => $totalDays,
 
-                // 🔥 salary parts (incremented OR default)
                 'basic' => $basic,
                 'hra' => $hra,
                 'allowance' => $allowance,
@@ -286,7 +289,6 @@ public function generate(Request $request)
     return redirect()->route('admin.payroll.index')
         ->with('success', 'Payroll generated successfully with salary increments applied 🎉');
 }
-
 
 
 
@@ -426,7 +428,7 @@ public function manualAdjustmentForm($payrollId)
 {
     $payroll = Payroll::with('employee')->findOrFail($payrollId); // Payroll + Employee detail
     $employee = $payroll->employee_id;
-    
+
     // Fetch all adjustments for this employee, newest first
     $adjustments = PayrollAdjustment::where('employee_id', $employee)
         ->orderBy('created_at', 'desc')

@@ -120,7 +120,7 @@
                 @if($company && $company->branch_image)
                     <img src="{{ $company->branch_image->url }}" alt="Company Logo">
                 @else
-                    <div class="logo-icon"></div>
+                    <div class="logo-icon"><img src="{{ asset('logo.jpg') }}" alt=""></div>
                 @endif
             </div>
 
