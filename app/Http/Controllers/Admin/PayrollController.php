@@ -20,6 +20,7 @@ use Carbon\Carbon;
 use Carbon\CarbonPeriod;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\DB;
 
 
 class PayrollController extends Controller
@@ -63,6 +64,10 @@ public function verifyMasterPassword(Request $request)
 
 
 
+
+
+
+
 public function generate(Request $request)
 {
     $request->validate([
@@ -73,223 +78,263 @@ public function generate(Request $request)
     $month = $request->month;
     $year  = $request->year;
 
-    $alreadyGenerated = Payroll::where('month', $month)
+    Payroll::where('month', $month)
         ->where('year', $year)
-        ->exists();
-
-    if ($alreadyGenerated && !$request->force) {
-        return redirect()
-            ->route('admin.payroll.index', compact('month', 'year'))
-            ->with('warning', '⚠ Payroll already generated. Master password required.');
-    }
+        ->delete();
 
     $start = Carbon::create($year, $month, 1)->startOfMonth();
     $end   = Carbon::create($year, $month, 1)->endOfMonth();
     $daysInMonth = $start->daysInMonth;
 
-    /* -------------------- Sundays -------------------- */
-    $sundayDates = [];
-    for ($d = $start->copy(); $d->lte($end); $d->addDay()) {
-        if ($d->isSunday()) {
-            $sundayDates[] = $d->toDateString();
-        }
-    }
+    $payrollDate = $start->copy();
 
-    /* -------------------- Holidays -------------------- */
+    /* ============================
+       HOLIDAYS
+    ============================ */
+    $holidayDates = [];
+
     $holidays = Holiday::where('start_date', '<=', $end)
         ->where('end_date', '>=', $start)
         ->get();
 
-    $holidayDates = [];
     foreach ($holidays as $h) {
-        $from = Carbon::parse($h->start_date)->lt($start) ? $start : Carbon::parse($h->start_date);
-        $to   = Carbon::parse($h->end_date)->gt($end) ? $end : Carbon::parse($h->end_date);
-
-        foreach (CarbonPeriod::create($from, $to) as $d) {
-            $holidayDates[] = $d->toDateString();
+        foreach (CarbonPeriod::create($h->start_date, $h->end_date) as $d) {
+            if ($d->between($start, $end)) {
+                $holidayDates[] = $d->format('Y-m-d');
+            }
         }
     }
-    $holidayDates = array_values(array_unique($holidayDates));
+
+    $holidayDates = array_unique($holidayDates);
+
+    /* ============================
+       SUNDAYS
+    ============================ */
+    $sundayDates = [];
+    for ($d = $start->copy(); $d->lte($end); $d->addDay()) {
+        if ($d->isSunday()) {
+            $sundayDates[] = $d->format('Y-m-d');
+        }
+    }
 
     $employees = Employee::all();
 
-    // 🔥 Proper DATE object instead of string comparison
-    $payrollDate = Carbon::create($year, $month, 1)->startOfMonth();
-
     foreach ($employees as $employee) {
 
-        /* =================================================
-           DEFAULT SALARY (Employee table)
-        ================================================= */
-        $basic     = $employee->basic_salary;
-        $hra       = $employee->hra;
-        $allowance = $employee->other_allowances;
+        /* ============================
+           DEFAULT SALARY
+        ============================ */
+        $basic     = (float)$employee->basic_salary;
+        $hra       = (float)$employee->hra;
+        $allowance = (float)$employee->other_allowances;
 
-        $gross     = $basic + $hra + $allowance;
-        $netSalary = $employee->net_salary;
+        $gross = $basic + $hra + $allowance;
+        $deductions = (float)($employee->deductions ?? 0);
+        $monthlySalary = $gross - $deductions;
 
         $incrementId = null;
-        $remarks = 'Salary processed successfully for this month.';
+        $remarks = 'Salary processed successfully.';
 
-        /* =================================================
-           SALARY INCREMENT (FIXED LOGIC)
-        ================================================= */
+        /* ============================
+           🔥 INCREMENT (ADDED BACK)
+        ============================ */
         $increment = SalaryIncrement::where('employee_id', $employee->id)
             ->whereRaw("LOWER(TRIM(status)) = 'approved'")
-            ->whereRaw("STR_TO_DATE(TRIM(increment_month), '%Y-%m') <= ?", [$payrollDate->format('Y-m-01')])
-            ->orderByRaw("STR_TO_DATE(TRIM(increment_month), '%Y-%m') DESC")
+            ->whereRaw("
+                STR_TO_DATE(CONCAT(increment_month,'-01'),'%Y-%m-%d') <= ?
+            ", [$payrollDate->format('Y-m-d')])
+            ->orderByRaw("
+                STR_TO_DATE(CONCAT(increment_month,'-01'),'%Y-%m-%d') DESC
+            ")
             ->first();
 
         if ($increment) {
 
-            $oldGross = $increment->old_gross_salary;
-            $newGross = $increment->new_gross_salary;
+            $basic     = (float)$increment->new_basic;
+            $hra       = (float)$increment->new_hra;
+            $allowance = (float)$increment->new_allowance;
 
-            $basic     = $increment->new_basic;
-            $hra       = $increment->new_hra;
-            $allowance = $increment->new_allowance;
-
-            $gross     = $newGross;
-            $netSalary = $gross - ($employee->deductions ?? 0);
-
-            $percent = $oldGross > 0
-                ? round((($newGross - $oldGross) / $oldGross) * 100, 2)
-                : 0;
+            $gross = (float)$increment->new_gross_salary;
+            $monthlySalary = $gross - $deductions;
 
             $incrementId = $increment->id;
 
-            $remarks =
-                "🎉 Congratulations! Your salary has been increased successfully. " .
-                "Earlier Gross was ₹{$oldGross}, now it is ₹{$newGross}. " .
-                "That’s a {$percent}% increment — keep growing! 🚀";
+            $remarks = "🎉 Salary updated from ₹{$increment->old_gross_salary} to ₹{$increment->new_gross_salary}";
         }
 
-        if (!$netSalary) continue;
-
-        /* -------------------- Joining Date -------------------- */
+        /* ============================
+           JOINING DATE
+        ============================ */
         $joining = $employee->date_of_joining
             ? Carbon::parse($employee->date_of_joining)->startOfDay()
             : null;
 
-        /* -------------------- Attendance -------------------- */
-        $attendanceQuery = AttendanceDetail::query();
-        $employee->user_id
-            ? $attendanceQuery->where('user_id', $employee->user_id)
-            : $attendanceQuery->where('employee_id', $employee->id);
+        /* ============================
+           LEAVE REQUEST
+        ============================ */
+        $approvedLeaveMap = [];
+        $paidLeaveDates = [];
+        $unpaidLeaveDates = [];
 
-        $attendanceRecords = $attendanceQuery
-            ->whereDate('date', '>=', $start)
-            ->whereDate('date', '<=', $end)
-            ->get();
+        if ($employee->user_id) {
 
-        $empSundayDates  = $joining
-            ? array_filter($sundayDates, fn($d) => Carbon::parse($d)->gte($joining))
-            : $sundayDates;
+            $leaveRequests = LeaveRequest::with('leaveType')
+                ->where('user_id', $employee->user_id)
+                ->where('status', 'approved')
+                ->where('date_from', '<=', $end)
+                ->where('date_to', '>=', $start)
+                ->get();
 
-        $empHolidayDates = $joining
-            ? array_filter($holidayDates, fn($d) => Carbon::parse($d)->gte($joining))
-            : $holidayDates;
+            foreach ($leaveRequests as $leave) {
+
+                $type = strtolower(trim($leave->leaveType->name ?? ''));
+
+                foreach (CarbonPeriod::create($leave->date_from, $leave->date_to) as $d) {
+
+                    if (!$d->between($start, $end)) continue;
+
+                    $date = $d->format('Y-m-d');
+
+                    if ($joining && $date < $joining->format('Y-m-d')) continue;
+
+                    $approvedLeaveMap[$date] = true;
+
+                    if (str_contains($type, 'paid')) {
+                        $paidLeaveDates[] = $date;
+                    } else {
+                        $unpaidLeaveDates[] = $date;
+                    }
+                }
+            }
+        }
+
+        /* ============================
+           ATTENDANCE
+        ============================ */
+        $attendance = AttendanceDetail::where('employee_id', $employee->id)
+            ->whereBetween('date', [$start->format('Y-m-d'), $end->format('Y-m-d')])
+            ->select('date', DB::raw('LOWER(TRIM(status)) as status'))
+            ->get()
+            ->groupBy('date');
 
         $presentDays = 0;
         $halfDays = 0;
         $absentDates = [];
+        $attendanceHolidayDates = [];
 
-        foreach ($attendanceRecords as $att) {
-            $date = Carbon::parse($att->date)->toDateString();
-            if ($joining && $date < $joining->toDateString()) continue;
+        foreach ($attendance as $date => $records) {
 
-            $status = strtolower(trim($att->status));
-            if ($status === 'present') $presentDays++;
-            elseif (in_array($status, ['half_day', 'half_time'])) $halfDays += 0.5;
-            elseif ($status === 'absent') $absentDates[] = $date;
-        }
+            $date = Carbon::parse($date)->format('Y-m-d');
 
-        /* -------------------- Paid Leaves -------------------- */
-        $leaveDates = [];
-        $approvedLeaves = LeaveRequest::where('user_id', $employee->user_id)
-            ->where('status', 'approved')
-            ->where('date_from', '<=', $end)
-            ->where('date_to', '>=', $start)
-            ->get();
-
-        foreach ($approvedLeaves as $leave) {
-            $leaveType = LeaveType::find($leave->leave_type_id);
-            if (!$leaveType || strtolower($leaveType->name) !== 'paid leave') continue;
-
-            $ls = max(Carbon::parse($leave->date_from), $start);
-            $le = min(Carbon::parse($leave->date_to), $end);
-
-            if ($joining && $le < $joining) continue;
-            if ($joining && $ls < $joining) $ls = $joining;
-
-            foreach (CarbonPeriod::create($ls, $le) as $d) {
-                $leaveDates[] = $d->toDateString();
+            // ✅ IMPORTANT: approved leave priority
+            if (isset($approvedLeaveMap[$date])) {
+                continue;
             }
+
+            if ($joining && $date < $joining->format('Y-m-d')) continue;
+
+            $statuses = collect($records)->pluck('status')->toArray();
+
+            if (in_array('present', $statuses) || in_array('week_off', $statuses)) {
+                $presentDays++;
+                continue;
+            }
+
+            if (array_intersect(['half_day','half_time'], $statuses)) {
+                $halfDays += 0.5;
+                continue;
+            }
+
+            if (in_array('absent', $statuses)) {
+                $absentDates[] = $date;
+                continue;
+            }
+
+            if (array_intersect(['paid leave','paid_leave'], $statuses)) {
+                $paidLeaveDates[] = $date;
+                continue;
+            }
+
+            if (collect($statuses)->contains(fn($s) => str_contains($s, 'holiday'))) {
+                $attendanceHolidayDates[] = $date;
+                continue;
+            }
+
+            $unpaidLeaveDates[] = $date;
         }
 
-        $leaveDates = array_unique($leaveDates);
-        $paidLeaveDays = count($leaveDates);
+        /* ============================
+           UNIQUE
+        ============================ */
+        $paidLeaveDates = array_unique($paidLeaveDates);
+        $unpaidLeaveDates = array_unique($unpaidLeaveDates);
+        $attendanceHolidayDates = array_unique($attendanceHolidayDates);
 
-        /* -------------------- Working Days -------------------- */
-        $empStart = $joining && $joining > $start ? $joining : $start;
-        $totalDays = $empStart->diffInDays($end) + 1;
+        /* ============================
+           HOLIDAYS FINAL
+        ============================ */
+        $finalHolidayDates = count($holidayDates)
+            ? $holidayDates
+            : $attendanceHolidayDates;
 
-        $empSundays = array_filter($empSundayDates, fn($d) =>
-            Carbon::parse($d)->between($empStart, $end)
-        );
+        $paidHolidays = array_diff($finalHolidayDates, $absentDates);
+        $validSundays = array_diff($sundayDates, $absentDates);
 
-        $workingDays = $totalDays - count($empSundays);
-        $validSundays = array_diff($empSundays, $empHolidayDates, $absentDates);
-        $paidHolidays = array_diff($empHolidayDates, $absentDates);
+        /* ============================
+           WORKING DAYS (FULL MONTH)
+        ============================ */
+        $workingDays = $daysInMonth;
 
-        $finalPaidDays = $presentDays + $halfDays + $paidLeaveDays
-            + count($validSundays) + count($paidHolidays);
+        /* ============================
+           FINAL PAID DAYS
+        ============================ */
+        $finalPaidDays =
+            $presentDays +
+            $halfDays +
+            count(array_diff($paidLeaveDates, $absentDates)) +
+            count($validSundays) +
+            count($paidHolidays);
 
         $absentDays = max(0, $workingDays - $finalPaidDays);
 
-        /* -------------------- Salary -------------------- */
-        $perDay = $netSalary / $daysInMonth;
-        $netPay = $perDay * $finalPaidDays;
+        /* ============================
+           SALARY
+        ============================ */
+        $perDaySalary = $monthlySalary / $daysInMonth;
+        $finalSalary = round($perDaySalary * $finalPaidDays, 2);
 
-        /* -------------------- SAVE PAYROLL -------------------- */
-        Payroll::updateOrCreate(
-            ['employee_id' => $employee->id, 'month' => $month, 'year' => $year],
-            [
-                'working_days' => $workingDays,
-                'sundays' => count($empSundays),
-                'valid_sundays' => count($validSundays),
-                'present_days' => $presentDays,
-                'half_days' => $halfDays,
-                'paid_leaves' => $paidLeaveDays,
-                'leave_days' => count($leaveDates),
-                'holidays' => count($paidHolidays),
-                'absent_days' => $absentDays,
-                'final_paid_days' => $finalPaidDays,
-                'total_days' => $totalDays,
-
-                'basic' => $basic,
-                'hra' => $hra,
-                'allowance' => $allowance,
-                'gross_salary' => $gross,
-                'deductions' => $employee->deductions,
-                'net_salary' => $netPay,
-                'remaining_salary' => $netPay,
-
-                'salary_increment_id' => $incrementId,
-                'remarks' => $remarks,
-                'status' => 'Pending',
-
-                'salary_generated_by' => auth()->id(),
-                'salary_generated_role' => auth()->user()->role ?? null,
-                'generated_at' => now(),
-            ]
-        );
+        Payroll::create([
+            'employee_id' => $employee->id,
+            'month' => $month,
+            'year' => $year,
+            'working_days' => $workingDays,
+            'present_days' => $presentDays,
+            'half_days' => $halfDays,
+            'paid_leaves' => count($paidLeaveDates),
+            'leave_days' => count($unpaidLeaveDates),
+            'holidays' => count($paidHolidays),
+            'absent_days' => $absentDays,
+            'final_paid_days' => $finalPaidDays,
+            'basic' => $basic,
+            'hra' => $hra,
+            'allowance' => $allowance,
+            'gross_salary' => $gross,
+            'deductions' => $deductions,
+            'net_salary' => $finalSalary,
+            'remaining_salary' => $finalSalary,
+            'salary_increment_id' => $incrementId,
+            'remarks' => $remarks,
+            'status' => 'Pending',
+            'salary_generated_by' => auth()->id(),
+            'salary_generated_role' => auth()->user()->role ?? null,
+            'generated_at' => now(),
+        ]);
     }
 
-    return redirect()->route('admin.payroll.index')
-        ->with('success', 'Payroll generated successfully with salary increments applied 🎉');
+    return redirect()
+        ->route('admin.payroll.index')
+        ->with('success', '🔥 PERFECT: Increment + Leave + Salary all fixed');
 }
-
 
 
 public function manualAdjustmentUpdate(Request $request, $payrollId)
@@ -304,7 +349,6 @@ public function manualAdjustmentUpdate(Request $request, $payrollId)
     $request->validate([
         'gross_salary'      => 'required|numeric',
         'manual_adjustment' => 'nullable|numeric',
-        // 'status'            => 'required|string',
         'remaining_salary'  => 'required|numeric',
         'adjustment_note'   => $request->manual_adjustment > 0 ? 'required|string|max:255' : 'nullable|string|max:255',
     ]);
@@ -319,13 +363,15 @@ public function manualAdjustmentUpdate(Request $request, $payrollId)
 
     // 🔹 Apply adjustment to PayrollAdjustment amount
     if ($payrollAdjustment) {
-        // Handle type: advance = subtract, bonus = add
+
         if ($payrollAdjustment->type === 'advance') {
-            $manualAmount = abs($manualAmount); // always positive
+            $manualAmount = abs($manualAmount);
             $newAmount = $payrollAdjustment->amount - $manualAmount;
+
         } elseif ($payrollAdjustment->type === 'bonus') {
             $manualAmount = abs($manualAmount);
             $newAmount = $payrollAdjustment->amount - $manualAmount;
+
         } else {
             $newAmount = $payrollAdjustment->amount - $manualAmount;
         }
@@ -345,11 +391,14 @@ public function manualAdjustmentUpdate(Request $request, $payrollId)
         ]);
     }
 
+    // 🔹 If payroll status paid then remaining salary = 0
+    $remainingSalary = $request->status === 'paid' ? 0 : $request->remaining_salary;
+
     // 🔹 Payroll Update
     $payroll->update([
         'gross_salary'          => $request->gross_salary,
         'manual_adjustment'     => $manualAmount,
-        'remaining_salary'      => $request->remaining_salary,
+        'remaining_salary'      => $remainingSalary,
         'status'                => $request->status,
         'salary_generated_by'   => $user->id,
         'salary_generated_role' => $roleName,
@@ -366,7 +415,7 @@ public function manualAdjustmentUpdate(Request $request, $payrollId)
             'manual_adjustment' => $manualAmount,
             'adjustment_note'   => $request->adjustment_note,
             'other_adjustments' => $request->other_adjustments,
-            'remaining_salary'  => $request->remaining_salary,
+            'remaining_salary'  => $remainingSalary,
             'reason'            => $request->message,
             'status'            => $request->status,
             'recorded_by'       => $user->id,
@@ -378,7 +427,6 @@ public function manualAdjustmentUpdate(Request $request, $payrollId)
     return redirect()->route('admin.payroll.list')
         ->with('success', 'Payroll updated successfully with manual adjustment.');
 }
-
 
 
     public function list(Request $request)

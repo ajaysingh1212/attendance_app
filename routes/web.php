@@ -67,7 +67,7 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.', 'namespace' => 'Admin', 'mi
     Route::resource('branches', 'BranchController');
 
     // Attendance Detail
-    Route::post('attendance-details/update-status', [App\Http\Controllers\Admin\AttendanceDetailController::class, 'updateStatus'])->name('attendance-details.updateStatus');
+    Route::post('attendance-details/update-status', [AttendanceDetailController::class, 'updateStatus'])->name('attendance-details.updateStatus');
 
 
     // ⛳️ CSV, Media, and Custom Routes
@@ -79,7 +79,7 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.', 'namespace' => 'Admin', 'mi
 
     // 🟢 Place BEFORE resource to avoid conflict
     Route::get('attendance-details/user/{user}', [AttendanceDetailController::class, 'calendarData'])->name('attendance-details.calendarData');
-    Route::get('admin/attendance-details/fetch-detail', [AttendanceDetailController::class, 'fetchDetail'])->name('admin.attendance-details.fetchDetail');
+    Route::get('attendance-details/fetch-detail', [AttendanceDetailController::class, 'fetchDetail'])->name('attendance-details.fetchDetail');
     Route::get('attendance-details/summary', [AttendanceDetailController::class, 'summary'])
      ->name('summary');
 

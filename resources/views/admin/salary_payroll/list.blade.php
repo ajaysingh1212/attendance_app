@@ -98,12 +98,12 @@
                         <td>{{ $payroll->holidays ?? '0' }}</td>
                         <td>{{ $payroll->final_paid_days ?? '-' }}</td>
                         <td>{{ $payroll->total_days }}</td>
-                        <td>₹{{ number_format($payroll->employee->basic_salary, 2) }}</td>
-                        <td>₹{{ number_format($payroll->employee->hra, 2) }}</td>
-                        <td>₹{{ number_format($payroll->employee->other_allowances, 2) }}</td>
-                        <td>₹{{ number_format($payroll->employee->bonus, 2) }}</td>
-                        <td>₹{{ number_format($payroll->employee->net_salary ?? ($payroll->employee->basic + $payroll->employee->hra + $payroll->employee->allowance + $payroll->employee->bonus), 2) }}</td>
-                        <td>₹{{ number_format($payroll->employee->deductions, 2) }}</td>
+                        <td>₹{{ number_format($payroll->basic ?? 0, 2) }}</td>
+                        <td>₹{{ number_format($payroll->hra ?? 0, 2) }}</td>
+                        <td>₹{{ number_format($payroll->allowance ?? 0, 2) }}</td>
+                        <td>₹{{ number_format($payroll->bonus ?? 0, 2) }}</td>
+                        <td>₹{{ number_format($payroll->gross_salary ?? 0, 2) }}</td>
+                        <td>₹{{ number_format($payroll->deductions ?? 0, 2) }}</td>
                         <td>₹{{ number_format($payroll->manual_adjustment ?? 0, 2) }}</td>
 
                         <!-- ✅ Net Salary Logic -->
@@ -139,13 +139,13 @@
                             <a href="{{ route('admin.payrolls.manualAdjustForm', $payroll->id) }}" class="btn btn-sm btn-primary">
                                 <i class="fas fa-eye"></i>
                             </a>
-                            <a href="javascript:void(0)" 
-                               class="btn btn-sm btn-warning viewPayrollDetails" 
+                            <a href="javascript:void(0)"
+                               class="btn btn-sm btn-warning viewPayrollDetails"
                                data-id="{{ $payroll->id }}">
                                <i class="fas fa-info-circle"></i>
                             </a>
                             <button type="button" class="btn btn-sm btn-outline-warning viewPartPayments" data-id="{{ $payroll->id }}">
-                                <img src="{{ asset('200.gif') }}" alt="" width="30"> 
+                                <img src="{{ asset('200.gif') }}" alt="" width="30">
                             </button>
                         </td>
                     </tr>

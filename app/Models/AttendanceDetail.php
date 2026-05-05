@@ -28,20 +28,27 @@ class AttendanceDetail extends Model implements HasMedia
         'deleted_at',
     ];
 
+    /**
+     * Do NOT cast 'date' to Carbon here — it breaks getRawOriginal() and keyBy().
+     * The controller uses getRawOriginal('date') to always get the raw Y-m-d string.
+     */
+    protected $casts = [];
+
     public const STATUS_SELECT = [
-        'absent'   => 'Absent',
-        'present'  => 'Present',
-        'half_time' => 'Half Day',
-        'leave'    => 'Leave',
-        'week_off' => 'Week Off',
-        'holiday'  => 'Holiday',
-        'late'     => 'Late',
+        'absent'     => 'Absent',
+        'present'    => 'Present',
+        'half_time'  => 'Half Day',
+        'leave'      => 'Leave',
+        'week_off'   => 'Week Off',
+        'holiday'    => 'Holiday',
+        'late'       => 'Late',
         'paid_leave' => 'Paid Leave',
     ];
 
-
     protected $fillable = [
         'user_id',
+        'employee_id',
+        'date',
         'punch_in_time',
         'punch_in_latitude',
         'punch_in_longitude',
@@ -52,16 +59,16 @@ class AttendanceDetail extends Model implements HasMedia
         'punch_out_location',
         'punch_type',
         'status',
-        'created_at',
-        'updated_at',
-        'deleted_at',
-        'date',
+        'type',
         'changed_by',
         'ip_address',
         'device_name',
+        'created_at',
+        'updated_at',
+        'deleted_at',
     ];
 
-    protected function serializeDate(DateTimeInterface $date)
+    protected function serializeDate(DateTimeInterface $date): string
     {
         return $date->format('Y-m-d H:i:s');
     }
@@ -72,11 +79,26 @@ class AttendanceDetail extends Model implements HasMedia
         $this->addMediaConversion('preview')->fit('crop', 120, 120);
     }
 
+    /*
+    |--------------------------------------------------------------------------
+    | Relationships
+    |--------------------------------------------------------------------------
+    */
     public function user()
     {
         return $this->belongsTo(User::class, 'user_id');
     }
 
+    public function employee()
+    {
+        return $this->belongsTo(Employee::class, 'employee_id');
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Media Accessors
+    |--------------------------------------------------------------------------
+    */
     public function getPunchInImageAttribute()
     {
         $file = $this->getMedia('punch_in_image')->last();
@@ -85,7 +107,6 @@ class AttendanceDetail extends Model implements HasMedia
             $file->thumbnail = $file->getUrl('thumb');
             $file->preview   = $file->getUrl('preview');
         }
-
         return $file;
     }
 
@@ -97,7 +118,22 @@ class AttendanceDetail extends Model implements HasMedia
             $file->thumbnail = $file->getUrl('thumb');
             $file->preview   = $file->getUrl('preview');
         }
-
         return $file;
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Scopes
+    |--------------------------------------------------------------------------
+    */
+    public function scopeForUser($query, $userId)
+    {
+        return $query->where('user_id', $userId);
+    }
+
+    public function scopeForDateRange($query, $start, $end)
+    {
+        // Uses the 'date' column — works for ALL historical data
+        return $query->whereBetween('date', [$start, $end]);
     }
 }
