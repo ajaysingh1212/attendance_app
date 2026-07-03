@@ -12,6 +12,35 @@
     box-shadow: 0 0 20px rgba(0,0,0,.08);
     padding: 20px;
 }
+.salary-panel {
+    position: sticky;
+    top: 16px;
+    background: #fff;
+    border-radius: 1rem;
+    box-shadow: 0 0 20px rgba(0,0,0,.08);
+    overflow: hidden;
+}
+.salary-panel-header {
+    padding: 18px 20px;
+    color: #fff;
+    background: linear-gradient(135deg, #312e81, #2563eb);
+}
+.salary-panel-body { padding: 18px; }
+.salary-row {
+    display:flex; justify-content:space-between; gap:12px;
+    padding:9px 0; border-bottom:1px solid #edf0f5;
+}
+.salary-row span:first-child { color:#64748b; }
+.salary-row strong { color:#172554; text-align:right; }
+.salary-total {
+    margin-top:16px; padding:15px; border-radius:12px;
+    background:#ecfdf5; color:#065f46; text-align:center;
+}
+.salary-section-title {
+    margin:18px 0 4px; color:#1e3a8a; font-weight:700;
+    font-size:.82rem; text-transform:uppercase; letter-spacing:.06em;
+}
+.salary-loading { padding:40px 15px; text-align:center; color:#64748b; }
 
 /* ─────────────────────────────────────────────
    SUMMARY CARDS
@@ -82,6 +111,7 @@
 .fc-event.holiday    { background-color: #6610f2 !important; color:#fff !important; }
 .fc-event.late       { background-color: #fd7e14 !important; color:#fff !important; }
 .fc-event.paid_leave { background-color: #20c997 !important; color:#fff !important; }
+.fc-event.unpaid_leave { background-color: #b02a37 !important; color:#fff !important; }
 
 /* ─────────────────────────────────────────────
    MODAL TWEAKS
@@ -100,6 +130,7 @@
 .badge-holiday    { background:#e2d9f3; color:#3d0f8a; }
 .badge-late       { background:#ffe5d0; color:#7b3304; }
 .badge-paid_leave { background:#d2f4ea; color:#0a5740; }
+.badge-unpaid_leave { background:#f8d7da; color:#842029; }
 
 #loadingSpinner {
     display:none;
@@ -130,12 +161,14 @@
         <select class="form-control d-inline-block" style="max-width:320px;" id="userSelect">
             <option value="">🔽 Select Employee</option>
             @foreach($users as $user)
-                <option value="{{ $user->id }}">{{ $user->name }} ({{ $user->email }})</option>
+                <option value="{{ $user->id }}" {{ (int) $defaultUserId === (int) $user->id ? 'selected' : '' }}>{{ $user->name }} ({{ $user->email }})</option>
             @endforeach
         </select>
     </div>
     @endif
 
+    <div class="row align-items-start">
+    <div class="col-lg-8 mb-4">
     {{-- Summary cards --}}
     <div id="attendanceSummary">
         <div class="summary-box border-success"   data-icon="✔" data-status="present">
@@ -154,6 +187,14 @@
             <h5>Leave</h5>
             <div id="count-leave"   class="counter text-warning">0</div>
         </div>
+        <div class="summary-box border-success" data-icon="P" data-status="paid_leave">
+            <h5>Paid Leave</h5>
+            <div id="count-paid_leave" class="counter text-success">0</div>
+        </div>
+        <div class="summary-box border-danger" data-icon="U" data-status="unpaid_leave">
+            <h5>Unpaid Leave</h5>
+            <div id="count-unpaid_leave" class="counter text-danger">0</div>
+        </div>
         <div class="summary-box border-secondary" data-icon="🛏" data-status="week_off">
             <h5>Week Off</h5>
             <div id="count-week_off" class="counter text-secondary">0</div>
@@ -171,6 +212,21 @@
     {{-- Calendar --}}
     <div class="calendar-wrapper">
         <div id="calendar"></div>
+    </div>
+    </div>
+
+    <div class="col-lg-4 mb-4">
+        <aside class="salary-panel" id="salaryPanel">
+            <div class="salary-panel-header">
+                <div class="small text-white-50" id="salaryPeriod">Salary Preview</div>
+                <h4 class="mb-1" id="salaryEmployeeName">Employee Salary</h4>
+                <div class="small" id="salaryEmployeeCode">Select an employee</div>
+            </div>
+            <div class="salary-panel-body" id="salaryPanelBody">
+                <div class="salary-loading">Loading salary calculation...</div>
+            </div>
+        </aside>
+    </div>
     </div>
 </div>
 
@@ -295,8 +351,10 @@ function runInjectedScripts(container) {
 document.addEventListener('DOMContentLoaded', function () {
 
     /* ── State ── */
-    let selectedUserId = '{{ auth()->id() }}';
+    let selectedUserId = '{{ $defaultUserId }}';
     let selectedDate   = null;
+    let salaryMonth    = {{ now()->month }};
+    let salaryYear     = {{ now()->year }};
     window.currentLoc  = undefined;   // shared with modal partial
 
     /* ── Elements ── */
@@ -326,6 +384,12 @@ document.addEventListener('DOMContentLoaded', function () {
             left  : 'prev,next today',
             center: 'title',
             right : 'dayGridMonth,timeGridWeek'
+        },
+
+        datesSet(info) {
+            salaryMonth = info.view.currentStart.getMonth() + 1;
+            salaryYear  = info.view.currentStart.getFullYear();
+            loadSalarySummary();
         },
 
         events: function (fetchInfo, successCallback, failureCallback) {
@@ -359,11 +423,80 @@ document.addEventListener('DOMContentLoaded', function () {
 
     calendar.render();
 
+    function money(value) {
+        return new Intl.NumberFormat('en-IN', {
+            style: 'currency', currency: 'INR', maximumFractionDigits: 2
+        }).format(Number(value || 0));
+    }
+
+    function salaryRow(label, value) {
+        return `<div class="salary-row"><span>${label}</span><strong>${value}</strong></div>`;
+    }
+
+    function loadSalarySummary() {
+        const body = document.getElementById('salaryPanelBody');
+        if (!selectedUserId) {
+            body.innerHTML = '<div class="salary-loading">Select an employee.</div>';
+            return;
+        }
+
+        body.innerHTML = '<div class="salary-loading">Calculating salary...</div>';
+        const url = new URL(`{{ route('admin.attendance-details.summary') }}`, window.location.origin);
+        url.searchParams.set('user_id', selectedUserId);
+        url.searchParams.set('month', salaryMonth);
+        url.searchParams.set('year', salaryYear);
+
+        fetch(url)
+            .then(response => {
+                if (!response.ok) throw new Error('Unable to calculate salary');
+                return response.json();
+            })
+            .then(payload => {
+                const employee = payload.employee;
+                const c = payload.calculation;
+                document.getElementById('salaryPeriod').textContent = c.period;
+                document.getElementById('salaryEmployeeName').textContent = employee.name || 'Employee';
+                document.getElementById('salaryEmployeeCode').textContent = employee.employee_code || '';
+
+                body.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="badge badge-primary">${c.salary_source}</span>
+                        ${c.increment_month ? `<small class="text-muted">Effective ${c.increment_month}</small>` : ''}
+                    </div>
+                    <div class="salary-section-title">Salary Structure</div>
+                    ${c.old_gross_salary !== null ? salaryRow('Previous Gross', money(c.old_gross_salary)) : ''}
+                    ${salaryRow('Basic', money(c.basic))}
+                    ${salaryRow('HRA', money(c.hra))}
+                    ${salaryRow('Allowance', money(c.allowance))}
+                    ${salaryRow('Gross Salary', money(c.gross_salary))}
+                    ${salaryRow('Deductions', '- ' + money(c.deductions))}
+                    ${salaryRow('Monthly Salary', money(c.monthly_salary))}
+                    ${salaryRow('Per Day Salary', money(c.per_day_salary))}
+
+                    <div class="salary-section-title">Attendance Calculation</div>
+                    ${salaryRow('Present Days', c.present_days)}
+                    ${salaryRow('Half Days', c.half_days)}
+                    ${salaryRow('Paid Leaves', c.paid_leaves)}
+                    ${salaryRow('Unpaid Leaves', c.leave_days)}
+                    ${salaryRow('Absent Days', c.absent_days)}
+                    ${salaryRow('Holidays', c.holidays)}
+                    ${salaryRow('Week Off', c.valid_sundays)}
+                    ${salaryRow('Final Paid Days', `${c.final_paid_days} / ${c.working_days}`)}
+                    <div class="salary-total">
+                        <div class="small">Calculated Payable Salary</div>
+                        <div class="h3 mb-0">${money(c.net_salary)}</div>
+                    </div>`;
+            })
+            .catch(error => {
+                body.innerHTML = `<div class="alert alert-danger mb-0">${error.message}</div>`;
+            });
+    }
+
     /* ══════════════════════════════════════════
        SUMMARY CARDS
     ══════════════════════════════════════════ */
     function updateSummary(events) {
-        const counts = { present:0, absent:0, half_time:0, leave:0, week_off:0, holiday:0 };
+        const counts = { present:0, absent:0, half_time:0, leave:0, paid_leave:0, unpaid_leave:0, week_off:0, holiday:0 };
         events.forEach(ev => {
             const cls = (ev.classNames || [])[0];
             if (cls && counts.hasOwnProperty(cls)) counts[cls]++;
@@ -516,6 +649,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 $('#masterPasswordModal').modal('hide');
                 $('#attendanceModal').modal('hide');
                 calendar.refetchEvents();
+                loadSalarySummary();
                 showToast('Attendance saved successfully!', 'success');
             } else {
                 const msg = typeof res.message === 'object'
@@ -553,8 +687,9 @@ document.addEventListener('DOMContentLoaded', function () {
        USER SELECT (admin)
     ══════════════════════════════════════════ */
     document.getElementById('userSelect')?.addEventListener('change', function () {
-        selectedUserId = this.value || '{{ auth()->id() }}';
+        selectedUserId = this.value || '{{ $defaultUserId }}';
         calendar.refetchEvents();
+        loadSalarySummary();
     });
 
     /* ══════════════════════════════════════════

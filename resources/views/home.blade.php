@@ -1,590 +1,1192 @@
 @extends('layouts.admin')
 
-@section('styles')
-    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-@endsection
-<!-- Confetti / Fireworks -->
-<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-
-<!-- Firecracker Sound -->
-<audio id="fireSound" src="{{ asset('song/bd.mp3') }}" preload="auto"></audio>
-
 @section('content')
+
+{{-- ════════════════════════════════════════════════════════
+     CELEBRATION MODAL
+════════════════════════════════════════════════════════ --}}
 @if(
-    (isset($birthdayEmployees) && $birthdayEmployees->count()) ||
+    (isset($birthdayEmployees)    && $birthdayEmployees->count())   ||
     (isset($anniversaryEmployees) && $anniversaryEmployees->count())
 )
 <div class="modal fade" id="celebrationModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content celebration-box text-center">
             <div class="modal-body p-4">
-                <button id="enableSoundBtn" class="btn btn-sm btn-success d-none">
-                    🔊 Enable Celebration Sound
-                </button>
-
+                <button id="enableSoundBtn" class="btn btn-sm btn-success d-none">🔊 Enable Celebration Sound</button>
                 <div class="party-icons">🎉 🎈 🎊 🎆 💐</div>
-
-                {{-- 🎂 Birthdays --}}
                 @if($birthdayEmployees->count())
                     <h4 class="mt-3">🎂 Happy Birthday 🎂</h4>
                     <ul class="list-unstyled">
                         @foreach($birthdayEmployees as $emp)
-                            <li class="celebration-item">
-                                🎉 <strong>{{ $emp->full_name }}</strong>
-                                <small class="text-muted">
-                                    ({{ $emp->department ?? 'Team Member' }})
-                                </small>
-                            </li>
+                            <li class="celebration-item">🎉 <strong>{{ $emp->full_name }}</strong>
+                                <small class="text-muted">({{ $emp->department ?? 'Team Member' }})</small></li>
                         @endforeach
                     </ul>
                 @endif
-
-                {{-- 💍 Anniversaries --}}
                 @if($anniversaryEmployees->count())
                     <h4 class="mt-4">💍 Happy Work Anniversary 💍</h4>
                     <ul class="list-unstyled">
                         @foreach($anniversaryEmployees as $emp)
-                            <li class="celebration-item">
-                                🎊 <strong>{{ $emp->full_name }}</strong>
-                                <small class="text-muted">
-                                    ({{ $emp->department ?? 'Team Member' }})
-                                </small>
-                            </li>
+                            <li class="celebration-item">🎊 <strong>{{ $emp->full_name }}</strong>
+                                <small class="text-muted">({{ $emp->department ?? 'Team Member' }})</small></li>
                         @endforeach
                     </ul>
                 @endif
-
-                <button class="btn btn-primary mt-3" data-bs-dismiss="modal">
-                    🎉 Celebrate Together 🎉
-                </button>
-
+                <button class="btn btn-primary mt-3" data-bs-dismiss="modal">🎉 Celebrate Together 🎉</button>
             </div>
         </div>
     </div>
 </div>
 @endif
 
-<style>
-    .celebration-box {
-    background: linear-gradient(135deg, #fde68a, #fca5a5, #93c5fd);
-    border-radius: 16px;
-    animation: popIn 0.6s ease;
-}
+{{-- Firecracker Sound --}}
+<audio id="fireSound" src="{{ asset('song/bd.mp3') }}" preload="auto"></audio>
 
-@keyframes popIn {
-    from { transform: scale(0.7); opacity: 0; }
-    to { transform: scale(1); opacity: 1; }
-}
+@if(isset($message))
+<div class="alert-banner">
+    <i class="fas fa-exclamation-triangle"></i> {{ $message }}
+</div>
+@else
 
-.party-icons {
-    font-size: 30px;
-    animation: float 2s infinite alternate;
-}
+{{-- ════════════════════════════════════════════════════════
+     INACTIVE EMPLOYEES RIGHT DRAWER
+════════════════════════════════════════════════════════ --}}
+<div id="inactiveOverlay" class="drawer-overlay" onclick="closeInactiveDrawer()"></div>
+<div id="inactiveDrawer" class="inactive-drawer">
+    <div class="drawer-header">
+        <div>
+            <h5 class="drawer-title">👤 Inactive Employees</h5>
+            <p class="drawer-subtitle">Resigned · Terminated · Suspended</p>
+        </div>
+        <button class="drawer-close" onclick="closeInactiveDrawer()">✕</button>
+    </div>
+    <div class="drawer-search">
+        <input type="text" id="drawerSearch" placeholder="🔍 Search employee..." oninput="filterDrawer(this.value)">
+    </div>
+    <div id="drawerContent" class="drawer-body">
+        <div class="drawer-loading">
+            <div class="spinner"></div>
+            <span>Loading...</span>
+        </div>
+    </div>
+</div>
 
-@keyframes float {
-    from { transform: translateY(0); }
-    to { transform: translateY(-10px); }
-}
+{{-- ════════════════════════════════════════════════════════
+     MAIN DASHBOARD
+════════════════════════════════════════════════════════ --}}
+<div class="hrdash">
 
-.celebration-text {
-    font-size: 15px;
-    margin-top: 10px;
-    color: #1f2937;
-}
+    @include('admin.groupTasks.home-dashboard')
 
-.employee-name {
-    font-weight: bold;
-    color: #111827;
-}
-.celebration-box {
-    background: linear-gradient(135deg, #fde68a, #fca5a5, #93c5fd);
-    border-radius: 18px;
-    animation: popIn 0.6s ease;
-}
+    {{-- ── Top action bar ── --}}
+    <div class="hrdash-topbar">
+        <div class="topbar-left">
+            <h4 class="dash-title">
+                <span class="dash-dot"></span>
+                Attendance Dashboard
+            </h4>
+            <span class="dash-date">{{ \Carbon\Carbon::today()->format('l, d M Y') }}</span>
+        </div>
+        <div class="topbar-right">
+            {{-- Inactive employees trigger --}}
+            @php $inactiveCount = $inactiveEmployees->count() ?? 0; @endphp
+            @if($inactiveCount > 0)
+            <button class="btn-inactive-trigger" onclick="openInactiveDrawer()">
+                <span class="inactive-badge">{{ $inactiveCount }}</span>
+                👥 Inactive Staff
+            </button>
+            @endif
+        </div>
+    </div>
 
-.party-icons {
-    font-size: 34px;
-    animation: float 2s infinite alternate;
-}
-
-.celebration-item {
-    font-size: 15px;
-    margin: 6px 0;
-}
-
-@keyframes popIn {
-    from { transform: scale(0.7); opacity: 0; }
-    to { transform: scale(1); opacity: 1; }
-}
-
-@keyframes float {
-    from { transform: translateY(0); }
-    to { transform: translateY(-10px); }
-}
-.balloon {
-    position: fixed;
-    bottom: -120px;
-    width: 60px;
-    height: 80px;
-    border-radius: 50%;
-    animation: flyUp 6s linear infinite;
-    z-index: 1055;
-    opacity: 0.9;
-}
-
-.balloon::after {
-    content: '';
-    position: absolute;
-    width: 2px;
-    height: 40px;
-    background: #555;
-    left: 50%;
-    top: 80px;
-}
-
-@keyframes flyUp {
-    0% {
-        transform: translateY(0) translateX(0);
-        opacity: 1;
-    }
-    100% {
-        transform: translateY(-120vh) translateX(-30px);
-        opacity: 0;
-    }
-}
-
-</style>
-<script>
-function fireCrackers() {
-    const duration = 5 * 1000;
-    const end = Date.now() + duration;
-
-    (function frame() {
-        confetti({
-            particleCount: 10,
-            angle: 60,
-            spread: 80,
-            origin: { x: 0 }
-        });
-        confetti({
-            particleCount: 10,
-            angle: 120,
-            spread: 80,
-            origin: { x: 1 }
-        });
-        confetti({
-            particleCount: 12,
-            spread: 360,
-            origin: { x: 0.5, y: 0.3 }
-        });
-
-        if (Date.now() < end) {
-            requestAnimationFrame(frame);
-        }
-    })();
-}
-</script>
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    const sound = document.getElementById('fireSound');
-    const btn = document.getElementById('enableSoundBtn');
-
-    btn.classList.remove('d-none');
-
-    btn.addEventListener('click', function () {
-        sound.volume = 0.7;
-        sound.play().then(() => {
-            btn.classList.add('d-none');
-        }).catch(err => {
-            console.log('Sound blocked:', err);
-        });
-    });
-});
-</script>
-
-<script>
-function launchBalloons() {
-    const colors = ['#ef4444', '#22c55e', '#3b82f6', '#eab308', '#ec4899'];
-
-    for (let i = 0; i < 15; i++) {
-        const balloon = document.createElement('div');
-        balloon.className = 'balloon';
-        balloon.style.left = Math.random() * 100 + 'vw';
-        balloon.style.background = colors[Math.floor(Math.random() * colors.length)];
-        balloon.style.animationDuration = (4 + Math.random() * 3) + 's';
-
-        document.body.appendChild(balloon);
-
-        setTimeout(() => balloon.remove(), 7000);
-    }
-}
-</script>
-
-<div class="content">
-    <!-- User Dropdown -->
-    <form method="GET" action="{{ route('admin.home') }}" id="userForm">
-        <div class="form-group">
-            <label for="user_id"><strong>Select User:</strong></label>
-            <select name="user_id" id="user_id" class="form-control">
-                <option value="">-- Select User --</option>
-                @foreach($users as $user)
-                    <option value="{{ $user->id }}" {{ (isset($selectedUserId) && $selectedUserId == $user->id) ? 'selected' : '' }}>
-                        {{ $user->name }}
-                    </option>
+    {{-- ── Filter Form ── --}}
+    <form method="GET" class="filter-form">
+        <div class="filter-group">
+            <label>Period</label>
+            <select name="filter" class="filter-select" onchange="toggleCustom(this.value)">
+                @foreach(['today'=>'Today','yesterday'=>'Yesterday','week'=>'This Week','halfmonth'=>'Half Month','month'=>'This Month','custom'=>'Custom'] as $f => $label)
+                    <option value="{{ $f }}" {{ $filter==$f?'selected':'' }}>{{ $label }}</option>
                 @endforeach
             </select>
-            @if(request()->has('month'))
-                <input type="hidden" name="month" value="{{ request()->get('month') }}">
-            @endif
         </div>
+        <div class="filter-group custom-range" id="customRange" style="display:{{ $filter=='custom'?'flex':'none' }}">
+            <div>
+                <label>From</label>
+                <input type="date" name="from" value="{{ $customFrom }}" class="filter-input">
+            </div>
+            <div>
+                <label>To</label>
+                <input type="date" name="to" value="{{ $customTo }}" class="filter-input">
+            </div>
+        </div>
+        <div class="filter-group">
+            <label>Status</label>
+            <select name="status" class="filter-select">
+                <option value="">All Status</option>
+                @foreach(\App\Models\AttendanceDetail::STATUS_SELECT as $key => $value)
+                    <option value="{{ $key }}" {{ ($statusFilter ?? '')==$key ? 'selected' : '' }}>{{ $value }}</option>
+                @endforeach
+            </select>
+        </div>
+        <button type="submit" class="btn-apply">
+            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z"/></svg>
+            Apply Filter
+        </button>
     </form>
 
-    @if(!empty($monthlyData))
-        @php
-            $statusCount = [
-                'present' => 0, 'absent' => 0, 'half_day' => 0, 'leave' => 0,
-                'week_off' => 0, 'holiday' => 0, 'late' => 0, 'no_data' => 0
-            ];
-            foreach ($monthlyData as $status) {
-                $matched = false;
-                foreach ($statusCount as $key => $count) {
-                    if (str_contains($status, $key)) {
-                        $statusCount[$key]++;
-                        $matched = true;
-                    }
-                }
-                if (!$matched) $statusCount['no_data']++;
-            }
-            $currentMonth = \Carbon\Carbon::createFromFormat('Y-m', $monthInput);
-            $previousMonth = $currentMonth->copy()->subMonth()->format('Y-m');
-            $nextMonth = $currentMonth->copy()->addMonth()->format('Y-m');
-        @endphp
+    {{-- ── Stats Row 1 ── --}}
+    @php
+        $cards1 = [
+            ['label'=>'Total Staff',   'value'=>$totalEmployees, 'icon'=>'👥', 'cls'=>'card-blue'],
+            ['label'=>'Punched In',    'value'=>$totalPunchIn,   'icon'=>'⏺',  'cls'=>'card-green'],
+            ['label'=>'Punched Out',   'value'=>$totalPunchOut,  'icon'=>'⏏',  'cls'=>'card-red'],
+        ];
+        $cards2 = [
+            ['label'=>'Present',  'value'=>$totalPresent, 'icon'=>'✅', 'cls'=>'card-emerald', 'status'=>'present'],
+            ['label'=>'Absent',   'value'=>$totalAbsent,  'icon'=>'❌', 'cls'=>'card-rose',    'status'=>'absent'],
+            ['label'=>'Half Day', 'value'=>$totalHalf,    'icon'=>'🔸', 'cls'=>'card-amber',   'status'=>'half_time'],
+            ['label'=>'On Leave', 'value'=>$totalLeave,   'icon'=>'📋', 'cls'=>'card-sky',     'status'=>'leave'],
+        ];
+        $total2 = $totalPresent + $totalAbsent + $totalHalf + $totalLeave;
+    @endphp
 
-        <!-- Month Navigation -->
-        <div class="d-flex justify-content-between align-items-center my-3">
-            <a href="{{ route('admin.home', ['user_id' => $selectedUserId, 'month' => $previousMonth]) }}" class="btn btn-outline-primary">
-                &laquo; {{ \Carbon\Carbon::createFromFormat('Y-m', $previousMonth)->format('F Y') }}
-            </a>
-            <h4 class="text-center mb-0">{{ $currentMonth->format('F Y') }}</h4>
-            <a href="{{ route('admin.home', ['user_id' => $selectedUserId, 'month' => $nextMonth]) }}" class="btn btn-outline-primary">
-                {{ \Carbon\Carbon::createFromFormat('Y-m', $nextMonth)->format('F Y') }} &raquo;
-            </a>
-        </div>
-
-        <!-- Download PDF Button -->
-        <div class="text-end mb-3">
-            <button id="downloadPdfBtn" class="btn btn-sm btn-danger">
-                <i class="fas fa-file-pdf"></i> Download PDF
-            </button>
-        </div>
-
-        <!-- Printable Section Start -->
-        <div id="printableArea">
-            <!-- Status Summary -->
-            <div class="row text-center my-3">
-                @foreach($statusCount as $status => $count)
-                    <div class="col">
-                        <div class="p-2 rounded 
-                            @if($status == 'present') bg-success text-white
-                            @elseif($status == 'absent') bg-danger text-white
-                            @elseif($status == 'half_day') bg-warning text-dark
-                            @elseif($status == 'leave') bg-primary text-white
-                            @elseif($status == 'week_off') bg-secondary text-white
-                            @elseif($status == 'holiday') bg-info text-white
-                            @elseif($status == 'late') bg-warning text-white
-                            @else bg-light text-dark
-                            @endif">
-                            <strong>{{ ucfirst(str_replace('_', ' ', $status)) }}: {{ $count }}</strong>
-                        </div>
-                    </div>
-                @endforeach
-            </div>
-
-            <!-- Monthly Calendar -->
-            <div class="card">
-                <div class="card-header bg-info text-white">
-                    <h5 class="mb-0">Monthly Attendance Calendar</h5>
-                </div>
-                <div class="card-body">
-                    <div class="d-flex justify-content-center mb-3">
-                        @foreach(['Sun','Mon','Tue','Wed','Thu','Fri','Sat'] as $day)
-                            <div class="text-center fw-bold" style="width: 100px;">{{ $day }}</div>
-                        @endforeach
-                    </div>
-
-                    @php
-                        $firstDate = \Carbon\Carbon::createFromFormat('Y-m-d', array_key_first($monthlyData));
-                        $dates = [];
-                        foreach ($monthlyData as $date => $status) {
-                            $dates[] = ['date' => $date, 'status' => $status];
-                        }
-                        $paddingStart = $firstDate->dayOfWeek;
-                        for ($i = 0; $i < $paddingStart; $i++) array_unshift($dates, null);
-                        while (count($dates) % 7 !== 0) $dates[] = null;
-                        $calendarGrid = array_chunk($dates, 7);
-                    @endphp
-
-                    <div class="calendar-grid d-flex flex-column gap-2">
-                        @foreach($calendarGrid as $week)
-                            <div class="d-flex justify-content-center">
-                                @foreach($week as $day)
-                                    @if(is_null($day))
-                                        <div class="m-1 p-2 bg-light border" style="width: 100px; height: 80px;"></div>
-                                    @else
-                                        @php
-                                            $color = match(true) {
-                                                str_contains($day['status'], 'absent') => 'bg-danger text-white',
-                                                str_contains($day['status'], 'half_day') => 'bg-warning text-dark',
-                                                str_contains($day['status'], 'present') => 'bg-success text-white',
-                                                str_contains($day['status'], 'leave') => 'bg-primary text-white',
-                                                str_contains($day['status'], 'week_off') => 'bg-secondary text-white',
-                                                str_contains($day['status'], 'holiday') => 'bg-info text-white',
-                                                str_contains($day['status'], 'late') => 'bg-warning text-white',
-                                                default => 'bg-dark text-white',
-                                            };
-                                        @endphp
-                                        <a href="{{ route('admin.home', ['user_id' => $selectedUserId, 'date' => $day['date'], 'month' => $monthInput]) }}"
-                                           class="m-1 p-2 text-center rounded shadow-sm {{ $color }}"
-                                           style="width: 100px; height: 80px; text-decoration: none; display: flex; flex-direction: column; justify-content: center;">
-                                            <strong>{{ \Carbon\Carbon::parse($day['date'])->format('d M') }}</strong>
-                                            <small>{{ ucfirst($day['status'] ?? 'No Data') }}</small>
-                                        </a>
-                                    @endif
-                                @endforeach
-                            </div>
-                        @endforeach
-                    </div>
-                </div>
+    <div class="stats-row">
+        @foreach($cards1 as $c)
+        <div class="stat-card {{ $c['cls'] }}">
+            <div class="stat-icon">{{ $c['icon'] }}</div>
+            <div class="stat-info">
+                <span class="stat-label">{{ $c['label'] }}</span>
+                <span class="stat-value">{{ $c['value'] }}</span>
             </div>
         </div>
-        <!-- Printable Section End -->
-    @endif
+        @endforeach
+    </div>
 
-   @if($attendances && $attendances->count())
-    @foreach($attendances as $record)
-        <div class="card mt-4 shadow-sm">
-            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-                <div>
-                    <h5 class="mb-0">Attendance Details</h5>
-                    <small>
-                        User: <strong>{{ $record->user->name }}</strong> |
-                        Date: <strong>{{ \Carbon\Carbon::parse($record->punch_in_time)->format('d M Y') }}</strong>
-                    </small>
-                </div>
-                <button type="button"
-                        class="btn btn-warning btn-sm"
-                        data-bs-toggle="modal"
-                        data-bs-target="#statusModal"
-                        data-date="{{ \Carbon\Carbon::parse($record->punch_in_time)->format('Y-m-d') }}"
-                        data-time="{{ \Carbon\Carbon::parse($record->punch_in_time)->format('H:i') }}">
-                    Update Status
-                </button>
+    <div class="stats-row mt-3">
+        @foreach($cards2 as $c)
+        <div class="stat-card {{ $c['cls'] }} clickable" onclick="filterCards('{{ $c['status'] }}')">
+            <div class="stat-icon">{{ $c['icon'] }}</div>
+            <div class="stat-info">
+                <span class="stat-label">{{ $c['label'] }}</span>
+                <span class="stat-value">{{ $c['value'] }}</span>
             </div>
-
-            <div class="card-body">
-                <div class="row mb-4">
-                    <!-- Punch In -->
-                    <div class="col-md-6">
-                        <div class="card border-success">
-                            <div class="card-header bg-success text-white">
-                                <strong>Punch In Location</strong>
-                            </div>
-                            <div class="card-body p-2">
-                                @if($record->punch_in_latitude && $record->punch_in_longitude)
-                                    <iframe width="100%" height="300" frameborder="0"
-                                            src="https://maps.google.com/maps?q={{ $record->punch_in_latitude }},{{ $record->punch_in_longitude }}&t=k&z=16&output=embed"
-                                            allowfullscreen></iframe>
-                                    <p class="mt-2"><strong>Location:</strong> {{ $record->punch_in_location }}</p>
-                                    <p><strong>Time:</strong> {{ \Carbon\Carbon::parse($record->punch_in_time)->format('h:i A') }}</p>
-                                @else
-                                    <p class="text-danger">Punch In location not available.</p>
-                                @endif
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Punch Out -->
-                    <div class="col-md-6">
-                        <div class="card border-danger">
-                            <div class="card-header bg-danger text-white">
-                                <strong>Punch Out Location</strong>
-                            </div>
-                            <div class="card-body p-2">
-                                @if($record->punch_out_latitude && $record->punch_out_longitude)
-                                    <iframe width="100%" height="300" frameborder="0"
-                                            src="https://maps.google.com/maps?q={{ $record->punch_out_latitude }},{{ $record->punch_out_longitude }}&t=k&z=16&output=embed"
-                                            allowfullscreen></iframe>
-                                    <p class="mt-2"><strong>Location:</strong> {{ $record->punch_out_location }}</p>
-                                    <p><strong>Time:</strong> {{ \Carbon\Carbon::parse($record->punch_out_time)->format('h:i A') }}</p>
-                                @else
-                                    <p class="text-danger">Punch Out location not available.</p>
-                                @endif
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            <div class="stat-bar">
+                @if($total2 > 0)
+                    <div class="stat-bar-fill" style="width:{{ round($c['value']/$total2*100) }}%"></div>
+                @endif
             </div>
         </div>
-    @endforeach
-@else
-    <div class="card mt-4 shadow-sm">
-        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-            <h5 class="mb-0">Attendance Details</h5>
-            @if(isset($selectedDate))
-                <button type="button"
-                        class="btn btn-warning btn-sm"
-                        data-bs-toggle="modal"
-                        data-bs-target="#statusModal"
-                        data-date="{{ \Carbon\Carbon::parse($selectedDate)->format('Y-m-d') }}"
-                        data-time="09:00"> {{-- Default time or empty --}}
-                    Update Status
-                </button>
-            @endif
-        </div>
-        <div class="card-body">
-            <div class="alert alert-info mb-0">No attendance records found for the selected criteria.</div>
+        @endforeach
+        <div class="stat-card card-gray">
+            <div class="stat-icon">🔢</div>
+            <div class="stat-info">
+                <span class="stat-label">Total</span>
+                <span class="stat-value">{{ $total2 }}</span>
+            </div>
         </div>
     </div>
+
+    {{-- ── Attendance Cards ── --}}
+    <div class="section-header mt-4">
+        <h5>📋 Employee Attendance</h5>
+        <button class="btn-reset-filter" onclick="filterCards('')">Show All</button>
+    </div>
+
+    @if($attendanceDetails->count() > 0)
+    <div id="attendanceGrid" class="attendance-grid">
+        @foreach($attendanceDetails as $att)
+        @php
+            $statusCls = match($att->status) {
+                'present'   => 'att-present',
+                'absent'    => 'att-absent',
+                'half_time' => 'att-half',
+                'leave'     => 'att-leave',
+                default     => 'att-default',
+            };
+            $statusLabel = match($att->status) {
+                'present'   => '✅ Present',
+                'absent'    => '❌ Absent',
+                'half_time' => '🔸 Half Day',
+                'leave'     => '📋 On Leave',
+                default     => ucfirst(str_replace('_',' ',$att->status)),
+            };
+        @endphp
+        <div class="att-card {{ $statusCls }}" data-status="{{ $att->status }}">
+            <div class="att-card-header">
+                <div class="att-avatar">{{ strtoupper(substr($att->user->full_name ?? 'E', 0, 2)) }}</div>
+                <div class="att-name-block">
+                    <span class="att-name">{{ $att->user->full_name ?? $att->user->name ?? 'N/A' }}</span>
+                    <span class="att-dept">{{ $att->user->department ?? $att->user->position ?? '' }}</span>
+                </div>
+                <span class="att-badge">{{ $statusLabel }}</span>
+            </div>
+            @if($att->status !== 'absent')
+            <div class="att-times">
+                <div class="att-time-block">
+                    <span class="time-label">IN</span>
+                    <span class="time-val">{{ $att->punch_in_time ? \Carbon\Carbon::parse($att->punch_in_time)->format('h:i A') : '—' }}</span>
+                    @if(!empty($att->punch_in_location))
+                        <span class="time-loc">📍 {{ Str::limit($att->punch_in_location, 30) }}</span>
+                    @endif
+                </div>
+                <div class="att-divider">⟶</div>
+                <div class="att-time-block">
+                    <span class="time-label">OUT</span>
+                    <span class="time-val">{{ $att->punch_out_time ? \Carbon\Carbon::parse($att->punch_out_time)->format('h:i A') : '—' }}</span>
+                    @if(!empty($att->punch_out_location))
+                        <span class="time-loc">📍 {{ Str::limit($att->punch_out_location, 30) }}</span>
+                    @endif
+                </div>
+            </div>
+            @elseif($att->status === 'leave' && isset($att->leave_detail))
+            <div class="att-leave-note">
+                Leave: {{ $att->leave_detail->date_from }} — {{ $att->leave_detail->date_to }}
+            </div>
+            @endif
+        </div>
+        @endforeach
+    </div>
+    <div id="noAttMsg" class="no-records" style="display:none">
+        <div class="no-records-icon">📭</div>
+        <p>No records match the selected filter.</p>
+    </div>
+    @else
+    <div class="no-records">
+        <div class="no-records-icon">📭</div>
+        <p>No attendance records found for the selected period.</p>
+    </div>
+    @endif
+
+    {{-- ── Absent List ── --}}
+    @if(isset($absentEmployees) && $absentEmployees->count())
+    <div class="absent-panel mt-4">
+        <div class="absent-panel-header">
+            <span>❌ Absent Today ({{ $absentEmployees->count() }})</span>
+        </div>
+        <div class="absent-list">
+            @foreach($absentEmployees as $name)
+            <span class="absent-chip">{{ $name }}</span>
+            @endforeach
+        </div>
+    </div>
+    @endif
+
+</div>{{-- end .hrdash --}}
 @endif
 
-
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- Status Update Modal -->
-    <div class="modal fade" id="statusModal" tabindex="-1" aria-labelledby="statusModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="statusModalLabel">Update Attendance Status</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <form id="statusForm" method="POST" action="{{ route('admin.attendance.save') }}">
-                    @csrf
-                    <div class="modal-body">
-                        <input type="hidden" name="user_id" id="modalUserId" value="{{ $selectedUserId }}">
-                        <input type="hidden" name="date" id="modalDate">
-                        <input type="hidden" name="time" id="modalTime">
-                        
-                        <div class="mb-3">
-                            <label for="status" class="form-label">Status</label>
-                            <select class="form-select" id="status" name="status" required>
-                                <option value="">-- Select Status --</option>
-                                <option value="absent">Absent</option>
-                                <option value="present">Present</option>
-                                <option value="half_day">Half Day</option>
-                                <option value="leave">Leave</option>
-                                <option value="week_off">Week Off</option>
-                                <option value="holiday">Holiday</option>
-                                <option value="late">Late</option>
-                                <option value="paid_leave">Paid Leave</option>
-                            </select>
-                        </div>
-                        
-                        <div class="mb-3">
-                            <p><strong>Date:</strong> <span id="displayDate"></span></p>
-                            <p><strong>Time:</strong> <span id="displayTime"></span></p>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                        <button type="submit" class="btn btn-primary">Save changes</button>
-                    </div>
-                </form>
+{{-- ════════════════════════════════════════════════════════
+     REACTIVATE CONFIRMATION MODAL
+════════════════════════════════════════════════════════ --}}
+<div class="modal fade" id="reactivateModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius:16px;overflow:hidden;">
+            <div class="modal-header" style="background:#1e3a5f;color:#fff;">
+                <h5 class="modal-title">♻️ Reactivate Employee</h5>
+                <button class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Reactivate <strong id="reactName"></strong>? They will appear on the dashboard and payroll will be generated.</p>
+                <input type="hidden" id="reactEmployeeId">
+                <textarea id="reactRemarks" class="form-control mt-2" rows="2" placeholder="Reason for reactivation (optional)"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button class="btn btn-success" onclick="confirmReactivate()">♻️ Reactivate</button>
             </div>
         </div>
     </div>
 </div>
-@endsection
+
+{{-- ════════════════════════════════════════════════════════
+     STYLES
+════════════════════════════════════════════════════════ --}}
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;600;700&display=swap');
+
+* { box-sizing: border-box; }
+
+.hrdash {
+    font-family: 'DM Sans', sans-serif;
+    padding: 24px;
+    background: #f0f4f9;
+    min-height: 100vh;
+}
+
+.home-task-dashboard {
+    background: #fff;
+    border: 1px solid #dfe5ef;
+    border-radius: 12px;
+    padding: 18px;
+    margin-bottom: 22px;
+    box-shadow: 0 8px 24px rgba(31,45,61,.06);
+}
+.home-task-ring {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    background: #fff1f2;
+    border: 1px solid #fecdd3;
+    color: #9f1239;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 14px;
+}
+.home-task-ring.visible { display: flex; }
+.home-task-open {
+    background: #fff;
+    color: #9f1239;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-weight: 700;
+}
+.home-task-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 14px;
+}
+.home-task-head h4 {
+    margin: 0;
+    color: #172b4d;
+    font-size: 1.1rem;
+    font-weight: 800;
+}
+.home-task-head p {
+    margin: 3px 0 0;
+    color: #6b778c;
+    font-size: .82rem;
+}
+.home-task-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.home-task-actions a {
+    border: 1px solid #d8dee9;
+    color: #253858;
+    background: #fff;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-weight: 700;
+    text-decoration: none;
+}
+.home-task-actions a.primary {
+    background: #2563eb;
+    color: #fff;
+    border-color: #2563eb;
+}
+.home-task-metrics {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(120px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+}
+.home-task-metric {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 12px 14px;
+    border-left: 4px solid var(--accent);
+}
+.home-task-metric span {
+    color: #64748b;
+    font-size: .76rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+.home-task-metric strong {
+    display: block;
+    font-size: 1.6rem;
+    color: #172b4d;
+    line-height: 1;
+    margin-top: 8px;
+}
+.home-task-table-wrap {
+    border: 1px solid #edf1f7;
+    border-radius: 8px;
+    overflow: hidden;
+}
+.home-task-table-title {
+    padding: 11px 14px;
+    background: #f7f9fc;
+    color: #253858;
+    font-weight: 800;
+    border-bottom: 1px solid #edf1f7;
+}
+.home-task-table {
+    margin-bottom: 0;
+}
+.home-task-table thead th {
+    background: #fff;
+    color: #42526e;
+    font-size: .74rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+.home-task-table td strong,
+.home-task-table td small {
+    display: block;
+}
+.home-task-table td small {
+    color: #6b778c;
+}
+
+/* ── Top Bar ── */
+.hrdash-topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+.dash-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #1e3a5f;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+}
+.dash-dot {
+    width: 10px; height: 10px;
+    background: #3b82f6;
+    border-radius: 50%;
+    display: inline-block;
+    box-shadow: 0 0 0 4px rgba(59,130,246,.2);
+}
+.dash-date { font-size: .82rem; color: #64748b; margin-left: 20px; }
+
+.btn-inactive-trigger {
+    position: relative;
+    background: linear-gradient(135deg, #1e3a5f, #2563eb);
+    color: #fff;
+    border: none;
+    border-radius: 50px;
+    padding: 10px 22px;
+    font-size: .85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .25s;
+    letter-spacing: .3px;
+}
+.btn-inactive-trigger:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(37,99,235,.3); }
+.inactive-badge {
+    background: #ef4444;
+    color: #fff;
+    border-radius: 50%;
+    width: 20px; height: 20px;
+    font-size: .72rem;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 6px;
+}
+
+/* ── Filter ── */
+.filter-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    align-items: flex-end;
+    background: #fff;
+    padding: 18px 22px;
+    border-radius: 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,.06);
+    margin-bottom: 24px;
+}
+.filter-group { display: flex; flex-direction: column; gap: 4px; }
+.filter-group label { font-size: .75rem; font-weight: 600; color: #475569; text-transform: uppercase; letter-spacing: .5px; }
+.filter-select, .filter-input {
+    border: 1.5px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 8px 14px;
+    font-size: .88rem;
+    color: #1e293b;
+    outline: none;
+    transition: border-color .2s;
+    background: #f8fafc;
+    min-width: 140px;
+}
+.filter-select:focus, .filter-input:focus { border-color: #3b82f6; background: #fff; }
+.custom-range { display: flex; gap: 10px; }
+.btn-apply {
+    background: #1e3a5f;
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 22px;
+    font-size: .88rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    transition: all .2s;
+}
+.btn-apply:hover { background: #2563eb; }
+
+/* ── Stats ── */
+.stats-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px,1fr));
+    gap: 14px;
+}
+.stat-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 18px 16px 14px;
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    box-shadow: 0 2px 10px rgba(0,0,0,.05);
+    border-top: 3px solid transparent;
+    transition: transform .2s, box-shadow .2s;
+    position: relative;
+    overflow: hidden;
+}
+.stat-card.clickable { cursor: pointer; }
+.stat-card:hover { transform: translateY(-3px); box-shadow: 0 8px 22px rgba(0,0,0,.1); }
+.stat-icon { font-size: 1.6rem; }
+.stat-info { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.stat-label { font-size: .75rem; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; }
+.stat-value { font-family: 'Space Grotesk', sans-serif; font-size: 1.9rem; font-weight: 700; line-height: 1; }
+.stat-bar { position: absolute; bottom: 0; left: 0; right: 0; height: 4px; background: #f1f5f9; }
+.stat-bar-fill { height: 100%; border-radius: 0 2px 2px 0; transition: width .6s ease; }
+.card-blue    { border-top-color: #3b82f6; } .card-blue    .stat-value { color: #1d4ed8; } .card-blue    .stat-bar-fill { background:#3b82f6; }
+.card-green   { border-top-color: #10b981; } .card-green   .stat-value { color: #059669; } .card-green   .stat-bar-fill { background:#10b981; }
+.card-red     { border-top-color: #ef4444; } .card-red     .stat-value { color: #dc2626; } .card-red     .stat-bar-fill { background:#ef4444; }
+.card-emerald { border-top-color: #34d399; } .card-emerald .stat-value { color: #065f46; } .card-emerald .stat-bar-fill { background:#34d399; }
+.card-rose    { border-top-color: #fb7185; } .card-rose    .stat-value { color: #be123c; } .card-rose    .stat-bar-fill { background:#fb7185; }
+.card-amber   { border-top-color: #fbbf24; } .card-amber   .stat-value { color: #92400e; } .card-amber   .stat-bar-fill { background:#fbbf24; }
+.card-sky     { border-top-color: #38bdf8; } .card-sky     .stat-value { color: #0369a1; } .card-sky     .stat-bar-fill { background:#38bdf8; }
+.card-gray    { border-top-color: #94a3b8; } .card-gray    .stat-value { color: #1e293b; } .card-gray    .stat-bar-fill { background:#94a3b8; }
+
+/* ── Section Header ── */
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+}
+.section-header h5 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #1e3a5f;
+    margin: 0;
+}
+.btn-reset-filter {
+    background: #f1f5f9;
+    border: none;
+    border-radius: 8px;
+    padding: 6px 14px;
+    font-size: .8rem;
+    color: #475569;
+    cursor: pointer;
+}
+
+/* ── Attendance Grid ── */
+.attendance-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 14px;
+}
+.att-card {
+    background: #fff;
+    border-radius: 14px;
+    padding: 16px;
+    box-shadow: 0 2px 10px rgba(0,0,0,.05);
+    border-left: 4px solid #e2e8f0;
+    transition: transform .2s;
+}
+.att-card:hover { transform: translateY(-2px); }
+.att-present   { border-left-color: #10b981; }
+.att-absent    { border-left-color: #ef4444; background: #fff9f9; }
+.att-half      { border-left-color: #f59e0b; }
+.att-leave     { border-left-color: #3b82f6; }
+.att-card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+.att-avatar {
+    width: 38px; height: 38px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #1e3a5f, #2563eb);
+    color: #fff;
+    font-size: .8rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.att-name-block { flex: 1; min-width: 0; }
+.att-name { display: block; font-weight: 600; font-size: .9rem; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.att-dept { font-size: .73rem; color: #94a3b8; }
+.att-badge {
+    font-size: .72rem;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 50px;
+    white-space: nowrap;
+    background: #f1f5f9;
+    color: #475569;
+}
+.att-present  .att-badge { background: #d1fae5; color: #065f46; }
+.att-absent   .att-badge { background: #fee2e2; color: #991b1b; }
+.att-half     .att-badge { background: #fef3c7; color: #92400e; }
+.att-leave    .att-badge { background: #dbeafe; color: #1e40af; }
+
+.att-times {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 6px;
+    align-items: center;
+    background: #f8fafc;
+    border-radius: 10px;
+    padding: 10px;
+}
+.att-time-block { display: flex; flex-direction: column; gap: 2px; }
+.time-label { font-size: .68rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; }
+.time-val { font-family: 'Space Grotesk', sans-serif; font-size: .9rem; font-weight: 600; color: #1e293b; }
+.time-loc { font-size: .68rem; color: #94a3b8; }
+.att-divider { color: #cbd5e1; font-size: 1rem; text-align: center; }
+.att-leave-note { font-size: .78rem; color: #1e40af; background: #dbeafe; padding: 6px 10px; border-radius: 8px; }
+
+/* ── Absent panel ── */
+.absent-panel {
+    background: #fff;
+    border-radius: 14px;
+    padding: 16px 20px;
+    box-shadow: 0 2px 10px rgba(0,0,0,.05);
+    border-left: 4px solid #ef4444;
+}
+.absent-panel-header {
+    font-weight: 700;
+    font-size: .9rem;
+    color: #991b1b;
+    margin-bottom: 12px;
+}
+.absent-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.absent-chip {
+    background: #fee2e2;
+    color: #991b1b;
+    border-radius: 50px;
+    padding: 5px 14px;
+    font-size: .78rem;
+    font-weight: 500;
+}
+
+/* ── No records ── */
+.no-records {
+    text-align: center;
+    padding: 50px 20px;
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 2px 10px rgba(0,0,0,.05);
+}
+.no-records-icon { font-size: 3rem; margin-bottom: 10px; }
+.no-records p { color: #64748b; font-size: .95rem; }
+
+/* ── Alert Banner ── */
+.alert-banner {
+    background: #fef9c3;
+    border: 1.5px solid #fde047;
+    color: #713f12;
+    padding: 14px 20px;
+    border-radius: 12px;
+    margin: 20px;
+    font-weight: 500;
+}
+
+/* ══ INACTIVE DRAWER ══════════════════════════════════ */
+.drawer-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.35);
+    z-index: 1040;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .3s;
+}
+.drawer-overlay.open { opacity: 1; pointer-events: all; }
+
+.inactive-drawer {
+    position: fixed;
+    top: 0; right: 0;
+    width: min(420px, 95vw);
+    height: 100vh;
+    background: #fff;
+    z-index: 1041;
+    transform: translateX(100%);
+    transition: transform .35s cubic-bezier(.4,0,.2,1);
+    display: flex;
+    flex-direction: column;
+    box-shadow: -8px 0 40px rgba(0,0,0,.12);
+}
+.inactive-drawer.open { transform: translateX(0); }
+
+.drawer-header {
+    background: linear-gradient(135deg, #1e3a5f, #2563eb);
+    color: #fff;
+    padding: 22px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-shrink: 0;
+}
+.drawer-title { font-family: 'Space Grotesk',sans-serif; font-size: 1.1rem; font-weight: 700; margin: 0; }
+.drawer-subtitle { font-size: .75rem; opacity: .75; margin: 4px 0 0; }
+.drawer-close {
+    background: rgba(255,255,255,.15);
+    border: none;
+    color: #fff;
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: background .2s;
+}
+.drawer-close:hover { background: rgba(255,255,255,.3); }
+
+.drawer-search { padding: 14px 16px; border-bottom: 1px solid #f1f5f9; flex-shrink: 0; }
+.drawer-search input {
+    width: 100%;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 9px 14px;
+    font-size: .87rem;
+    outline: none;
+    transition: border-color .2s;
+}
+.drawer-search input:focus { border-color: #3b82f6; }
+
+.drawer-body { flex: 1; overflow-y: auto; padding: 14px 16px; }
+
+.drawer-loading {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 12px; height: 160px;
+    color: #94a3b8; font-size: .87rem;
+}
+.spinner {
+    width: 32px; height: 32px;
+    border: 3px solid #e2e8f0;
+    border-top-color: #3b82f6;
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.inactive-card {
+    background: #f8fafc;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 14px;
+    margin-bottom: 12px;
+    transition: box-shadow .2s;
+}
+.inactive-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+.inactive-card-top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+.inactive-avatar {
+    width: 40px; height: 40px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: #fff;
+    font-size: .85rem;
+    font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+}
+.inactive-name { font-weight: 600; font-size: .9rem; color: #1e293b; }
+.inactive-dept { font-size: .73rem; color: #94a3b8; }
+.inactive-status {
+    margin-left: auto;
+    font-size: .72rem;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 50px;
+}
+.status-Resigned   { background: #fef3c7; color: #92400e; }
+.status-Terminated { background: #fee2e2; color: #991b1b; }
+.status-Suspended  { background: #f3f4f6; color: #374151; }
+
+.inactive-meta {
+    font-size: .75rem;
+    color: #64748b;
+    background: #fff;
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin-bottom: 10px;
+    line-height: 1.7;
+    border: 1px solid #f1f5f9;
+}
+.inactive-meta strong { color: #1e293b; }
+.inactive-meta .meta-row { display: flex; gap: 6px; }
+
+.btn-reactivate {
+    width: 100%;
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: #fff;
+    border: none;
+    border-radius: 9px;
+    padding: 9px;
+    font-size: .83rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .2s;
+}
+.btn-reactivate:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(16,185,129,.3); }
+
+/* ── Celebration ── */
+.celebration-box { background: linear-gradient(135deg,#fde68a,#fca5a5,#93c5fd); border-radius:16px; animation:popIn .6s ease; }
+.party-icons { font-size:30px; animation:float 2s infinite alternate; }
+.celebration-item { font-size:15px; margin:6px 0; }
+@keyframes popIn { from{transform:scale(.7);opacity:0} to{transform:scale(1);opacity:1} }
+@keyframes float { from{transform:translateY(0)} to{transform:translateY(-10px)} }
+
+/* ── Responsive ── */
+@media(max-width:640px) {
+    .hrdash { padding: 14px; }
+    .hrdash-topbar { flex-direction: column; align-items: flex-start; gap: 10px; }
+    .home-task-head { flex-direction: column; align-items: flex-start; }
+    .home-task-metrics { grid-template-columns: 1fr 1fr; }
+    .stats-row { grid-template-columns: 1fr 1fr; }
+    .attendance-grid { grid-template-columns: 1fr; }
+}
+</style>
+
+{{-- ════════════════════════════════════════════════════════
+     SCRIPTS
+════════════════════════════════════════════════════════ --}}
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+<script>
+/* ── Filter Cards by Status ── */
+function filterCards(status) {
+    const cards = document.querySelectorAll('#attendanceGrid .att-card');
+    const noMsg = document.getElementById('noAttMsg');
+    let found = 0;
+
+    cards.forEach(card => {
+        const show = !status || card.dataset.status === status;
+        card.style.display = show ? '' : 'none';
+        if (show) found++;
+    });
+
+    if (noMsg) noMsg.style.display = found === 0 ? 'block' : 'none';
+}
+
+/* ── Custom Date Range Toggle ── */
+function toggleCustom(val) {
+    document.getElementById('customRange').style.display = val === 'custom' ? 'flex' : 'none';
+}
+
+/* ══ INACTIVE DRAWER ══════════════════════════════════ */
+let drawerLoaded = false;
+let allInactive  = [];
+
+function openInactiveDrawer() {
+    document.getElementById('inactiveDrawer').classList.add('open');
+    document.getElementById('inactiveOverlay').classList.add('open');
+    document.body.style.overflow = 'hidden';
+    if (!drawerLoaded) loadInactiveEmployees();
+}
+
+function closeInactiveDrawer() {
+    document.getElementById('inactiveDrawer').classList.remove('open');
+    document.getElementById('inactiveOverlay').classList.remove('open');
+    document.body.style.overflow = '';
+}
+
+function loadInactiveEmployees() {
+    fetch('{{ route("admin.home.inactiveList") }}')
+        .then(r => r.json())
+        .then(data => {
+            allInactive  = data;
+            drawerLoaded = true;
+            renderDrawer(data);
+        })
+        .catch(() => {
+            document.getElementById('drawerContent').innerHTML =
+                '<p class="text-danger text-center">Failed to load data.</p>';
+        });
+}
+
+function renderDrawer(employees) {
+
+    const container = document.getElementById('drawerContent');
+
+    if (!employees.length) {
+
+        container.innerHTML = `
+            <div style="text-align:center;padding:50px 20px;color:#94a3b8;">
+                <div style="font-size:3rem;margin-bottom:10px;">🎉</div>
+                <p>No inactive employees!</p>
+            </div>
+        `;
+
+        return;
+    }
+
+    container.innerHTML = employees.map(emp => {
+
+        const initials = (emp.full_name || 'E')
+            .slice(0,2)
+            .toUpperCase();
+
+        const log = emp.status_logs?.[0];
+
+        const changedBy = log?.changed_by_name || 'Unknown';
+
+        const approvedBy = log?.approved_by_name ?? null;
+
+        const changedAt = log?.changed_at
+            ? log.changed_at.substring(0,10)
+            : '—';
+
+        // ✅ FIXED LOGIC
+        const isPending = approvedBy === null;
+
+        return `
+
+        <div class="inactive-card">
+
+            <div class="inactive-card-top">
+
+                <div class="inactive-avatar">
+                    ${initials}
+                </div>
+
+                <div>
+                    <div class="inactive-name">
+                        ${emp.full_name || 'N/A'}
+                    </div>
+
+                    <div class="inactive-dept">
+                        ${emp.department || ''}
+                        ${emp.position ? ' · ' + emp.position : ''}
+                    </div>
+                </div>
+
+                <span class="inactive-status status-${emp.status}">
+                    ${emp.status}
+                </span>
+
+            </div>
+
+            <div class="inactive-meta">
+
+                <div class="meta-row">
+                    <span>📝 Changed By:</span>
+                    <strong>${changedBy}</strong>
+                </div>
+
+                <div class="meta-row">
+                    <span>📅 Changed Date:</span>
+                    <strong>${changedAt}</strong>
+                </div>
+
+                <div class="meta-row">
+                    <span>✅ Approved By:</span>
+
+                    <strong>
+                        ${approvedBy ?? 'Pending'}
+                    </strong>
+                </div>
+
+                <div class="meta-row">
+                    <span>📌 Status:</span>
+
+                    <strong style="
+                        color:${isPending ? '#d97706' : '#16a34a'};
+                        font-weight:700;
+                    ">
+                        ${isPending ? 'Pending Approval' : 'Approved'}
+                    </strong>
+
+                </div>
+
+            </div>
+
+            ${
+                isPending
+                ? `
+                    <button
+                        class="btn btn-warning w-100 mb-2"
+                        onclick="approveStatus(${emp.id})"
+                    >
+                        ✅ Approve Status
+                    </button>
+                `
+                : ''
+            }
+
+            <button
+                class="btn-reactivate"
+                onclick="openReactivate(${emp.id}, '${emp.full_name}')"
+            >
+                ♻️ Reactivate Employee
+            </button>
+
+        </div>
+
+        `;
+
+    }).join('');
+}
+function approveStatus(employeeId)
+{
+    if (!confirm('Approve this status change?')) {
+        return;
+    }
+
+    fetch(`/admin/employees/${employeeId}/approve-status`, {
+
+        method: 'POST',
+
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': '{{ csrf_token() }}',
+            'Accept': 'application/json'
+        }
+
+    })
+    .then(async res => {
+
+        const data = await res.json();
+
+        if (!res.ok) {
+            throw new Error(data.message || 'Approval failed');
+        }
+
+        return data;
+    })
+
+    .then(res => {
+
+        alert(res.message);
+
+        drawerLoaded = false;
+
+        allInactive = [];
+
+        loadInactiveEmployees();
+    })
+
+    .catch(err => {
+
+        alert(err.message || 'Something went wrong');
+
+    });
+}
+function filterDrawer(query) {
+    const q = query.toLowerCase().trim();
+    const filtered = q ? allInactive.filter(e => (e.full_name||'').toLowerCase().includes(q)) : allInactive;
+    renderDrawer(filtered);
+}
+
+/* ── Reactivate ── */
+function openReactivate(id, name) {
+    document.getElementById('reactEmployeeId').value = id;
+    document.getElementById('reactName').textContent  = name;
+    const modal = new bootstrap.Modal(document.getElementById('reactivateModal'));
+    modal.show();
+}
+
+function confirmReactivate() {
+    const id      = document.getElementById('reactEmployeeId').value;
+    const remarks = document.getElementById('reactRemarks').value;
+
+    fetch(`/admin/employees/${id}/reactivate`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({ remarks })
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.success) {
+            bootstrap.Modal.getInstance(document.getElementById('reactivateModal')).hide();
+            drawerLoaded = false;
+            allInactive  = [];
+            document.getElementById('drawerContent').innerHTML =
+                '<div class="drawer-loading"><div class="spinner"></div><span>Refreshing...</span></div>';
+            loadInactiveEmployees();
+            // Optional: reload page after 1.5s to update stats
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            alert(res.message || 'Error reactivating.');
+        }
+    });
+}
+
+/* ── Celebrations ── */
+function fireCrackers() {
+    const end = Date.now() + 5000;
+    (function frame() {
+        confetti({ particleCount:10, angle:60,  spread:80, origin:{x:0} });
+        confetti({ particleCount:10, angle:120, spread:80, origin:{x:1} });
+        confetti({ particleCount:12, spread:360, origin:{x:.5,y:.3} });
+        if (Date.now() < end) requestAnimationFrame(frame);
+    })();
+}
+
+function launchBalloons() {
+    const colors = ['#ef4444','#22c55e','#3b82f6','#eab308','#ec4899'];
+    for (let i = 0; i < 15; i++) {
+        const b = document.createElement('div');
+        b.style.cssText = `
+            position:fixed; bottom:-120px;
+            left:${Math.random()*100}vw;
+            width:60px; height:80px;
+            border-radius:50%;
+            background:${colors[Math.floor(Math.random()*colors.length)]};
+            animation:flyUp ${4+Math.random()*3}s linear forwards;
+            z-index:2000; opacity:.9;`;
+        document.body.appendChild(b);
+        setTimeout(() => b.remove(), 8000);
+    }
+}
+</script>
+
+<style>
+@keyframes flyUp {
+    0%   { transform:translateY(0) translateX(0);    opacity:1; }
+    100% { transform:translateY(-120vh) translateX(-30px); opacity:0; }
+}
+</style>
 
 @section('scripts')
-    @parent
-    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
-@if(
-    ($birthdayEmployees->count() ?? 0) ||
-    ($anniversaryEmployees->count() ?? 0)
-)
+@parent
+@include('admin.groupTasks.live-script')
+@if(($birthdayEmployees->count() ?? 0) || ($anniversaryEmployees->count() ?? 0))
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     setTimeout(() => {
-        const modal = new bootstrap.Modal(
-            document.getElementById('celebrationModal')
-        );
+        const modal = new bootstrap.Modal(document.getElementById('celebrationModal'));
         modal.show();
-
-        // 🔊 Play firecracker sound
         const sound = document.getElementById('fireSound');
         sound.volume = 1;
-        sound.play().catch(() => {});
-
-        // 🎆 Fireworks
+        sound.play().catch(()=>{});
         fireCrackers();
-
-        // 🎈 Balloons
         launchBalloons();
-
     }, 800);
 });
 </script>
 @endif
-
-
-    <script>
-        $(document).ready(function () {
-            // Initialize Select2
-            $('#user_id').select2({
-                placeholder: "-- Select User --",
-                width: '100%'
-            }).on('change', function () {
-                $('#userForm').submit();
-            });
-
-            // PDF Download
-            $('#downloadPdfBtn').on('click', function () {
-                const element = document.getElementById('printableArea');
-                const opt = {
-                    margin: 0.5,
-                    filename: 'attendance_{{ $selectedUserId ?? "user" }}_{{ $monthInput }}.pdf',
-                    image: { type: 'jpeg', quality: 0.98 },
-                    html2canvas: { scale: 2 },
-                    jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
-                };
-                html2pdf().set(opt).from(element).save();
-            });
-
-            // Status Modal Handling
-            $('#statusModal').on('show.bs.modal', function (event) {
-                const button = $(event.relatedTarget);
-                const date = button.data('date');
-                const time = button.data('time');
-                
-                $('#modalDate').val(date);
-                $('#modalTime').val(time);
-                $('#displayDate').text(date);
-                $('#displayTime').text(time);
-            });
-
-            // Form Submission
-            $('#statusForm').on('submit', function(e) {
-                e.preventDefault();
-                
-                $.ajax({
-                    type: 'POST',
-                    url: $(this).attr('action'),
-                    data: $(this).serialize(),
-                    success: function(response) {
-                        if (response.success) {
-                            $('#statusModal').modal('hide');
-                            location.reload();
-                        } else {
-                            alert(response.message || 'Error saving attendance');
-                        }
-                    },
-                    error: function(xhr) {
-                        alert('Error: ' + xhr.responseText);
-                    }
-                });
-            });
-        });
-    </script>
+@endsection
 @endsection

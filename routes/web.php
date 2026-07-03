@@ -13,6 +13,9 @@ use App\Http\Controllers\Admin\SalaryStructureController;
 use App\Http\Controllers\Admin\TrackMemberController;
 use App\Http\Controllers\Admin\SalaryIncrementController;
 use App\Http\Controllers\Admin\UsersController;
+use App\Http\Controllers\Admin\GroupTaskController;
+use App\Http\Controllers\Admin\TaskGroupController;
+use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/login');
 Route::get('/home', function () {
@@ -81,7 +84,7 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.', 'namespace' => 'Admin', 'mi
     Route::get('attendance-details/user/{user}', [AttendanceDetailController::class, 'calendarData'])->name('attendance-details.calendarData');
     Route::get('attendance-details/fetch-detail', [AttendanceDetailController::class, 'fetchDetail'])->name('attendance-details.fetchDetail');
     Route::get('attendance-details/summary', [AttendanceDetailController::class, 'summary'])
-     ->name('summary');
+     ->name('attendance-details.summary');
 
     // 🟩 Resource Route
     Route::resource('attendance-details', AttendanceDetailController::class);
@@ -110,6 +113,49 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.', 'namespace' => 'Admin', 'mi
     Route::post('notifications/parse-csv-import', 'NotificationController@parseCsvImport')->name('notifications.parseCsvImport');
     Route::post('notifications/process-csv-import', 'NotificationController@processCsvImport')->name('notifications.processCsvImport');
     Route::resource('notifications', 'NotificationController');
+
+
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Group Task Module Routes
+        | Paste inside your existing admin route group that has auth middleware.
+        |--------------------------------------------------------------------------
+        */
+
+        /* ── Task Groups ── */
+        Route::prefix('task-groups')->name('task-groups.')->group(function () {
+            Route::get('/',              [TaskGroupController::class, 'index'])->name('index');
+            Route::get('/create',        [TaskGroupController::class, 'create'])->name('create');
+            Route::post('/',             [TaskGroupController::class, 'store'])->name('store');
+            Route::get('/live/groups',   [TaskGroupController::class, 'liveGroups'])->name('live');
+            Route::get('/{taskGroup}',   [TaskGroupController::class, 'show'])->name('show');
+            Route::get('/{taskGroup}/edit', [TaskGroupController::class, 'edit'])->name('edit');
+            Route::put('/{taskGroup}',   [TaskGroupController::class, 'update'])->name('update');
+            Route::delete('/{taskGroup}',[TaskGroupController::class, 'destroy'])->name('destroy');
+
+            // JSON helpers
+            Route::get('/{taskGroup}/members', [TaskGroupController::class, 'members'])->name('members');
+        });
+
+        /* ── Group Tasks ── */
+        Route::prefix('group-tasks')->name('group-tasks.')->group(function () {
+            Route::get('/',              [GroupTaskController::class, 'index'])->name('index');
+            Route::get('/create',        [GroupTaskController::class, 'create'])->name('create');
+            Route::post('/',             [GroupTaskController::class, 'store'])->name('store');
+            Route::get('/report',        [GroupTaskController::class, 'report'])->name('report');
+            Route::get('/live',          [GroupTaskController::class, 'live'])->name('live');
+            Route::post('/mark-read',    [GroupTaskController::class, 'markRead'])->name('mark-read');
+
+            Route::get('/{groupTask}',   [GroupTaskController::class, 'show'])->name('show');
+            Route::get('/{groupTask}/edit', [GroupTaskController::class, 'edit'])->name('edit');
+            Route::put('/{groupTask}',   [GroupTaskController::class, 'update'])->name('update');
+            Route::delete('/{groupTask}',[GroupTaskController::class, 'destroy'])->name('destroy');
+
+            Route::post('/{groupTask}/accept',   [GroupTaskController::class, 'accept'])->name('accept');
+            Route::post('/{groupTask}/complete', [GroupTaskController::class, 'complete'])->name('complete');
+        });
 
     // App Updates
     Route::delete('app-updates/destroy', 'AppUpdatesController@massDestroy')->name('app-updates.massDestroy');
@@ -220,7 +266,7 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.', 'namespace' => 'Admin', 'mi
     // Leave Request
 
     // monthly attendence report
-        Route::get('employee-monthly-attendance', [EmployeeMonthlyAttendanceController::class, 'index'])
+    Route::get('employee-monthly-attendance', [EmployeeMonthlyAttendanceController::class, 'index'])
         ->name('employee_monthly_attendance.index');
 
     // Product Category
@@ -316,14 +362,34 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.', 'namespace' => 'Admin', 'mi
     Route::get('employee-details/{id}',
         [App\Http\Controllers\Admin\ExperienceLetterController::class, 'getEmployeeDetails']
     )->name('experience-letters.employee-details');
-Route::get(
-    'experience-letters/{id}/print',
-    [ExperienceLetterController::class,'printLetter']
-)->name('experience-letters.print');
-Route::post(
-    'experience-letters/{id}/update-status',
-    [ExperienceLetterController::class,'updateStatus']
-)->name('admin.experience-letters.updateStatus');
+    Route::get(
+        'experience-letters/{id}/print',
+        [ExperienceLetterController::class,'printLetter']
+    )->name('experience-letters.print');
+    Route::post(
+        'experience-letters/{id}/update-status',
+        [ExperienceLetterController::class,'updateStatus']
+    )->name('admin.experience-letters.updateStatus');
+
+    // staus change emolyee resign
+
+    Route::post('employees/{employee}/change-status',
+    [EmployeeController::class, 'changeStatus']
+    )->name('employees.changeStatus');
+
+    Route::post('employees/{employee}/approve-status',
+        [EmployeeController::class, 'approveStatus']
+    )->name('employees.approveStatus');
+
+    // ── Also add reactivate on HomeController ──
+    Route::post('employees/{employee}/reactivate',
+        'HomeController@reactivateEmployee'
+    )->name('employees.reactivate');
+
+    // Inactive employees JSON (AJAX for sidebar)
+    Route::get('inactive-employees',
+        'HomeController@inactiveList'
+    )->name('home.inactiveList');
 });
 Route::group(['prefix' => 'profile', 'as' => 'profile.', 'namespace' => 'Auth', 'middleware' => ['auth']], function () {
     // Change password
@@ -339,4 +405,3 @@ Route::get('admin/attendance/pdf', [App\Http\Controllers\Admin\HomeController::c
 
     Route::post('/attendance/save', [App\Http\Controllers\Admin\HomeController::class, 'saveAttendance'])->name('admin.attendance.save');
 Route::get('orders/{order}/invoice', [App\Http\Controllers\Admin\OrderController::class, 'downloadInvoice'])->name('admin.orders.invoice');
-

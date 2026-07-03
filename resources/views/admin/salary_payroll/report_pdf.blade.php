@@ -112,8 +112,8 @@
 <!-- Attendance Summary -->
 <table>
     <tr class="section-title"><th colspan="6" style="color:black;">Attendance Summary</th></tr>
-    <tr><th>Present</th><td>{{ $payroll->present_days ?? 0 }}</td><th>Absent</th><td>{{ $payroll->leave_days ?? 0 }}</td><th>Half Days</th><td>{{ $payroll->half_days ?? 0 }}</td></tr>
-    <tr><th>Paid Leaves</th><td>{{ $payroll->paid_leaves ?? 0 }}</td><th>Unpaid Leaves</th><td>{{ $payroll->unpaid_leaves ?? 0 }}</td><th>Holidays</th><td>{{ $payroll->holidays ?? 0 }}</td></tr>
+    <tr><th>Present</th><td>{{ $payroll->present_days ?? 0 }}</td><th>Absent</th><td>{{ $payroll->absent_days ?? 0 }}</td><th>Half Days</th><td>{{ $payroll->half_days ?? 0 }}</td></tr>
+    <tr><th>Paid Leaves</th><td>{{ $payroll->paid_leaves ?? 0 }}</td><th>Unpaid Leaves</th><td>{{ $payroll->leave_days ?? 0 }}</td><th>Holidays</th><td>{{ $payroll->holidays ?? 0 }}</td></tr>
     <tr><th>Week Off</th><td colspan="5">{{ $payroll->valid_sundays ?? '-' }}</th></tr>
     <tr class="highlight"><th colspan="2">Total Working Hours</th><td colspan="4">{{ $totalHoursFormatted }}</td></tr>
 </table>

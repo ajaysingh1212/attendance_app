@@ -47,7 +47,7 @@
 
         <hr>
 
- 
+
 
         {{-- IF PAYROLL ALREADY GENERATED --}}
         @if($alreadyGenerated)

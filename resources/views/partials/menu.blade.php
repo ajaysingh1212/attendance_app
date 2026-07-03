@@ -452,6 +452,34 @@
                 </a>
             </li>
         @endcan
+        <li class="c-sidebar-nav-dropdown {{ request()->is('admin/task-groups*') || request()->is('admin/group-tasks*') ? 'c-show' : '' }}">
+            <a class="c-sidebar-nav-dropdown-toggle" href="#">
+                <i class="fa-fw fas fa-tasks c-sidebar-nav-icon"></i>
+                Task Management
+            </a>
+            <ul class="c-sidebar-nav-dropdown-items">
+                <li class="c-sidebar-nav-item">
+                    <a href="{{ route('admin.group-tasks.index') }}" class="c-sidebar-nav-link {{ request()->is('admin/group-tasks') || request()->is('admin/group-tasks/*') ? 'c-active' : '' }}">
+                        <i class="fa-fw fas fa-clipboard-list c-sidebar-nav-icon"></i>
+                        Task Assign
+                    </a>
+                </li>
+                @if(Auth::user()->is_admin)
+                    <li class="c-sidebar-nav-item">
+                        <a href="{{ route('admin.task-groups.index') }}" class="c-sidebar-nav-link {{ request()->is('admin/task-groups') || request()->is('admin/task-groups/*') ? 'c-active' : '' }}">
+                            <i class="fa-fw fas fa-users-cog c-sidebar-nav-icon"></i>
+                            Grouping
+                        </a>
+                    </li>
+                @endif
+                <li class="c-sidebar-nav-item">
+                    <a href="{{ route('admin.group-tasks.report') }}" class="c-sidebar-nav-link {{ request()->is('admin/group-tasks/report') ? 'c-active' : '' }}">
+                        <i class="fa-fw fas fa-chart-bar c-sidebar-nav-icon"></i>
+                        Report
+                    </a>
+                </li>
+            </ul>
+        </li>
         @can('app_update_access')
             <li class="c-sidebar-nav-item">
                 <a href="{{ route("admin.app-updates.index") }}" class="c-sidebar-nav-link {{ request()->is("admin/app-updates") || request()->is("admin/app-updates/*") ? "c-active" : "" }}">

@@ -140,6 +140,33 @@ class User extends Authenticatable implements HasMedia
         return $this->hasMany(Report::class, 'user_id');
     }
 
+    public function employee()
+    {
+        return $this->hasOne(Employee::class);
+    }
+
+    public function scopeActiveEmployees($query)
+    {
+        return $query->whereHas('employee', function ($employee) {
+            $employee->where('status', 'Active');
+        });
+    }
+
+    public function taskGroups()
+    {
+        return $this->belongsToMany(TaskGroup::class)->withPivot('member_role')->withTimestamps();
+    }
+
+    public function createdGroupTasks()
+    {
+        return $this->hasMany(GroupTask::class, 'created_by_id');
+    }
+
+    public function assignedGroupTasks()
+    {
+        return $this->belongsToMany(GroupTask::class)->withPivot('status')->withTimestamps();
+    }
+
     /* ===================== */
     /* HELPERS */
     /* ===================== */

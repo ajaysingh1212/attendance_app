@@ -93,11 +93,11 @@
                         <td>{{ $payroll->present_days }}</td>
                         <td>{{ $payroll->half_days ?? '0' }}</td>
                         <td>{{ $payroll->paid_leaves ?? '0' }}</td>
-                        <td>{{ $payroll->unpaid_leaves ?? '0' }}</td>
+                        <td>{{ $payroll->leave_days ?? '0' }}</td>
                         <td>{{ $payroll->absent_days ?? '0' }}</td>
                         <td>{{ $payroll->holidays ?? '0' }}</td>
                         <td>{{ $payroll->final_paid_days ?? '-' }}</td>
-                        <td>{{ $payroll->total_days }}</td>
+                        <td>{{ $payroll->working_days }}</td>
                         <td>₹{{ number_format($payroll->basic ?? 0, 2) }}</td>
                         <td>₹{{ number_format($payroll->hra ?? 0, 2) }}</td>
                         <td>₹{{ number_format($payroll->allowance ?? 0, 2) }}</td>
@@ -151,7 +151,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="23" class="text-center text-muted">No payroll data found for this month.</td>
+                        <td colspan="25" class="text-center text-muted">No payroll data found for this month.</td>
                     </tr>
                 @endforelse
             </tbody>

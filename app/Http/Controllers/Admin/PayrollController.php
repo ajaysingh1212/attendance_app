@@ -15,6 +15,7 @@ use App\Models\AttendanceLog;
 use App\Models\PayrollPartPayment;
 use App\Models\SalaryIncrement;
 use App\Models\SalaryStructureHistory;
+use App\Services\PayrollCalculator;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
@@ -117,7 +118,10 @@ public function generate(Request $request)
         }
     }
 
-    $employees = Employee::all();
+    $employees = Employee::where(function ($q) {
+    $q->whereNotIn('status', ['Resigned', 'Terminated', 'Suspended'])
+      ->orWhereNull('status');
+    })->get();
 
     foreach ($employees as $employee) {
 
@@ -180,14 +184,14 @@ public function generate(Request $request)
 
             $leaveRequests = LeaveRequest::with('leaveType')
                 ->where('user_id', $employee->user_id)
-                ->where('status', 'approved')
+                ->whereRaw("LOWER(TRIM(status)) = 'approved'")
                 ->where('date_from', '<=', $end)
                 ->where('date_to', '>=', $start)
                 ->get();
 
             foreach ($leaveRequests as $leave) {
 
-                $type = strtolower(trim($leave->leaveType->name ?? ''));
+                $isPaidLeave = LeaveType::isPaidName($leave->leaveType->name ?? null);
 
                 foreach (CarbonPeriod::create($leave->date_from, $leave->date_to) as $d) {
 
@@ -197,13 +201,18 @@ public function generate(Request $request)
 
                     if ($joining && $date < $joining->format('Y-m-d')) continue;
 
-                    $approvedLeaveMap[$date] = true;
+                    // For overlapping approved requests, an unpaid type wins.
+                    $approvedLeaveMap[$date] = isset($approvedLeaveMap[$date])
+                        ? ($approvedLeaveMap[$date] && $isPaidLeave)
+                        : $isPaidLeave;
+                }
+            }
 
-                    if (str_contains($type, 'paid')) {
-                        $paidLeaveDates[] = $date;
-                    } else {
-                        $unpaidLeaveDates[] = $date;
-                    }
+            foreach ($approvedLeaveMap as $date => $isPaidLeave) {
+                if ($isPaidLeave) {
+                    $paidLeaveDates[] = $date;
+                } else {
+                    $unpaidLeaveDates[] = $date;
                 }
             }
         }
@@ -211,7 +220,12 @@ public function generate(Request $request)
         /* ============================
            ATTENDANCE
         ============================ */
-        $attendance = AttendanceDetail::where('employee_id', $employee->id)
+        $attendance = AttendanceDetail::where(function ($query) use ($employee) {
+                $query->where('employee_id', $employee->id);
+                if ($employee->user_id) {
+                    $query->orWhere('user_id', $employee->user_id);
+                }
+            })
             ->whereBetween('date', [$start->format('Y-m-d'), $end->format('Y-m-d')])
             ->select('date', DB::raw('LOWER(TRIM(status)) as status'))
             ->get()
@@ -219,6 +233,8 @@ public function generate(Request $request)
 
         $presentDays = 0;
         $halfDays = 0;
+        $presentDates = [];
+        $halfDayDates = [];
         $absentDates = [];
         $attendanceHolidayDates = [];
 
@@ -237,11 +253,19 @@ public function generate(Request $request)
 
             if (in_array('present', $statuses) || in_array('week_off', $statuses)) {
                 $presentDays++;
+                $presentDates[] = $date;
                 continue;
             }
 
             if (array_intersect(['half_day','half_time'], $statuses)) {
                 $halfDays += 0.5;
+                $halfDayDates[] = $date;
+                continue;
+            }
+
+            if (in_array('late', $statuses)) {
+                $presentDays++;
+                $presentDates[] = $date;
                 continue;
             }
 
@@ -268,6 +292,9 @@ public function generate(Request $request)
         ============================ */
         $paidLeaveDates = array_unique($paidLeaveDates);
         $unpaidLeaveDates = array_unique($unpaidLeaveDates);
+        $paidLeaveDates = array_values(array_diff($paidLeaveDates, $unpaidLeaveDates));
+        $presentDates = array_unique($presentDates);
+        $halfDayDates = array_unique($halfDayDates);
         $attendanceHolidayDates = array_unique($attendanceHolidayDates);
 
         /* ============================
@@ -277,8 +304,8 @@ public function generate(Request $request)
             ? $holidayDates
             : $attendanceHolidayDates;
 
-        $paidHolidays = array_diff($finalHolidayDates, $absentDates);
-        $validSundays = array_diff($sundayDates, $absentDates);
+        $paidHolidays = array_diff($finalHolidayDates, $absentDates, $unpaidLeaveDates);
+        $validSundays = array_diff($sundayDates, $absentDates, $unpaidLeaveDates);
 
         /* ============================
            WORKING DAYS (FULL MONTH)
@@ -288,14 +315,28 @@ public function generate(Request $request)
         /* ============================
            FINAL PAID DAYS
         ============================ */
-        $finalPaidDays =
-            $presentDays +
-            $halfDays +
-            count(array_diff($paidLeaveDates, $absentDates)) +
-            count($validSundays) +
-            count($paidHolidays);
+        // One date-wise ledger prevents leave/Sunday/holiday double payment.
+        $paidDayValues = [];
+        foreach ($presentDates as $date) {
+            $paidDayValues[$date] = 1.0;
+        }
+        foreach ($halfDayDates as $date) {
+            $paidDayValues[$date] = 0.5;
+        }
+        foreach ($paidLeaveDates as $date) {
+            $paidDayValues[$date] = 1.0;
+        }
+        foreach (array_merge($validSundays, $paidHolidays) as $date) {
+            if (!$joining || $date >= $joining->format('Y-m-d')) {
+                $paidDayValues[$date] = max($paidDayValues[$date] ?? 0, 1.0);
+            }
+        }
 
-        $absentDays = max(0, $workingDays - $finalPaidDays);
+        $finalPaidDays = array_sum($paidDayValues);
+
+        // Keep approved unpaid leave separate from ordinary absence in reports.
+        $totalUnpaidDays = max(0, $workingDays - $finalPaidDays);
+        $absentDays = max(0, $totalUnpaidDays - count($unpaidLeaveDates));
 
         /* ============================
            SALARY
@@ -303,27 +344,32 @@ public function generate(Request $request)
         $perDaySalary = $monthlySalary / $daysInMonth;
         $finalSalary = round($perDaySalary * $finalPaidDays, 2);
 
+        // Use the shared calculator used by the live attendance salary panel.
+        // This keeps generated payroll and AJAX preview on exactly the same rules.
+        $calculation = app(PayrollCalculator::class)->calculate($employee, (int) $month, (int) $year);
+
         Payroll::create([
             'employee_id' => $employee->id,
             'month' => $month,
             'year' => $year,
-            'working_days' => $workingDays,
-            'present_days' => $presentDays,
-            'half_days' => $halfDays,
-            'paid_leaves' => count($paidLeaveDates),
-            'leave_days' => count($unpaidLeaveDates),
-            'holidays' => count($paidHolidays),
-            'absent_days' => $absentDays,
-            'final_paid_days' => $finalPaidDays,
-            'basic' => $basic,
-            'hra' => $hra,
-            'allowance' => $allowance,
-            'gross_salary' => $gross,
-            'deductions' => $deductions,
-            'net_salary' => $finalSalary,
-            'remaining_salary' => $finalSalary,
-            'salary_increment_id' => $incrementId,
-            'remarks' => $remarks,
+            'working_days' => $calculation['working_days'],
+            'present_days' => $calculation['present_days'],
+            'half_days' => $calculation['half_days'],
+            'paid_leaves' => $calculation['paid_leaves'],
+            'leave_days' => $calculation['leave_days'],
+            'holidays' => $calculation['holidays'],
+            'absent_days' => $calculation['absent_days'],
+            'final_paid_days' => $calculation['final_paid_days'],
+            'valid_sundays' => $calculation['valid_sundays'],
+            'basic' => $calculation['basic'],
+            'hra' => $calculation['hra'],
+            'allowance' => $calculation['allowance'],
+            'gross_salary' => $calculation['gross_salary'],
+            'deductions' => $calculation['deductions'],
+            'net_salary' => $calculation['net_salary'],
+            'remaining_salary' => $calculation['net_salary'],
+            'salary_increment_id' => $calculation['salary_increment_id'],
+            'remarks' => $calculation['remarks'],
             'status' => 'Pending',
             'salary_generated_by' => auth()->id(),
             'salary_generated_role' => auth()->user()->role ?? null,

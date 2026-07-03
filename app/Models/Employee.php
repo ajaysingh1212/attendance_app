@@ -25,7 +25,7 @@ class Employee extends Model
     ];
 
      protected $casts = [
-        'other_allowances' => 'array'
+        'other_allowances' => 'decimal:2',
     ];
 
     public function user()
@@ -55,6 +55,23 @@ public function payrollAdjustments()
     public function reportingUser()
     {
         return $this->belongsTo(User::class, 'reporting_to');
+    }
+    public function statusLogs()
+    {
+        return $this->hasMany(\App\Models\EmployeeStatusLog::class);
+    }
+
+    public function latestStatusLog()
+    {
+        return $this->hasOne(\App\Models\EmployeeStatusLog::class)->latestOfMany();
+    }
+
+    /**
+     * Is this employee "active" for payroll & dashboard purposes?
+     */
+    public function isActive(): bool
+    {
+        return !in_array($this->status, \App\Models\EmployeeStatusLog::inactiveStatuses());
     }
 
 }

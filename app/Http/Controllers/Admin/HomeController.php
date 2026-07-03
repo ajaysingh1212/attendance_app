@@ -2,130 +2,631 @@
 
 namespace App\Http\Controllers\Admin;
 
-use App\Models\User;
-use App\Models\AttendanceDetail;
 use App\Models\Employee;
+use App\Models\AttendanceDetail;
+use App\Models\LeaveRequest;
+use App\Models\EmployeeStatusLog;
+use App\Models\GroupTask;
+use App\Models\TaskGroup;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
-use Carbon\CarbonPeriod;
+use Illuminate\Support\Facades\Auth;
 
 class HomeController
 {
-public function index(Request $request)
-{
-    /* ================= BASIC DATA ================= */
-    $users = User::all();
-    $selectedUserId = $request->get('user_id');
-    $selectedDate = $request->get('date');
-    $monthInput = $request->get('month') ?? Carbon::now()->format('Y-m');
+    /** Status values that hide an employee from the main dashboard */
+    private const INACTIVE = ['Resigned', 'Terminated', 'Suspended'];
 
-    $attendances = collect();
-    $monthlyData = [];
+    public function index(Request $request)
+    {
+        /* ══════════════════════════════════════════════
+           🎉 CELEBRATIONS
+        ══════════════════════════════════════════════ */
 
-    /* ================= ATTENDANCE LOGIC ================= */
-    if ($selectedUserId) {
-        $month = Carbon::createFromFormat('Y-m', $monthInput);
-        $start = $month->copy()->startOfMonth();
-        $end = $month->copy()->endOfMonth();
-        $period = CarbonPeriod::create($start, $end);
+        $today = Carbon::today();
 
-        $allAttendances = AttendanceDetail::where('user_id', $selectedUserId)
-            ->whereBetween('punch_in_time', [
-                $start->copy()->startOfDay(),
-                $end->copy()->endOfDay()
-            ])
-            ->get()
-            ->groupBy(fn ($item) =>
-                Carbon::parse($item->punch_in_time)->format('Y-m-d')
-            );
+        $birthdayEmployees = Employee::whereMonth(
+                'date_of_birth',
+                $today->month
+            )
+            ->whereDay(
+                'date_of_birth',
+                $today->day
+            )
+            ->get();
 
-        foreach ($period as $date) {
-            $dateString = $date->format('Y-m-d');
-            $records = $allAttendances->get($dateString);
+        $anniversaryEmployees = Employee::whereMonth(
+                'anniversary_date',
+                $today->month
+            )
+            ->whereDay(
+                'anniversary_date',
+                $today->day
+            )
+            ->get();
 
-            $statuses = $records
-                ? $records->pluck('status')->unique()->implode(', ')
-                : null;
+        $user = Auth::user();
 
-            $monthlyData[$dateString] = $statuses ?? 'no data';
+        $isAdmin = $user && $user->is_admin == 1;
+
+        /* ══════════════════════════════════════════════
+           FILTERS
+        ══════════════════════════════════════════════ */
+
+        $filter       = $request->input('filter', 'today');
+        $customFrom   = $request->input('from');
+        $customTo     = $request->input('to');
+        $statusFilter = $request->input('status');
+
+        /* ══════════════════════════════════════════════
+           DATE RANGE
+        ══════════════════════════════════════════════ */
+
+        switch ($filter) {
+
+            case 'yesterday':
+
+                $startDate = Carbon::yesterday()->startOfDay();
+                $endDate   = Carbon::yesterday()->endOfDay();
+
+                break;
+
+            case 'week':
+
+                $startDate = Carbon::now()->startOfWeek();
+                $endDate   = Carbon::now()->endOfWeek();
+
+                break;
+
+            case 'halfmonth':
+
+                $day        = Carbon::now()->day;
+                $monthStart = Carbon::now()->startOfMonth();
+                $monthMid   = Carbon::now()->startOfMonth()->addDays(14);
+                $monthEnd   = Carbon::now()->endOfMonth();
+
+                if ($day <= 15) {
+
+                    $startDate = $monthStart;
+                    $endDate   = $monthMid;
+
+                } else {
+
+                    $startDate = $monthMid->addDay();
+                    $endDate   = $monthEnd;
+                }
+
+                break;
+
+            case 'month':
+
+                $startDate = Carbon::now()->startOfMonth();
+                $endDate   = Carbon::now()->endOfMonth();
+
+                break;
+
+            case 'custom':
+
+                $startDate = $customFrom
+                    ? Carbon::parse($customFrom)->startOfDay()
+                    : Carbon::today()->startOfDay();
+
+                $endDate = $customTo
+                    ? Carbon::parse($customTo)->endOfDay()
+                    : Carbon::today()->endOfDay();
+
+                break;
+
+            default:
+
+                $startDate = Carbon::today()->startOfDay();
+                $endDate   = Carbon::today()->endOfDay();
         }
 
-        if ($selectedDate) {
-            $attendances = AttendanceDetail::where('user_id', $selectedUserId)
-                ->whereDate('punch_in_time', $selectedDate)
+        /* ══════════════════════════════════════════════
+           EMPLOYEES
+        ══════════════════════════════════════════════ */
+
+        $employeesQuery = Employee::query();
+
+        // Non-admin → only own employee data
+        if (!$isAdmin && $user) {
+
+            $employeesQuery->where('user_id', $user->id);
+        }
+
+        $employees = $employeesQuery
+            ->where(function ($q) {
+
+                $q->whereNotIn('status', self::INACTIVE)
+                  ->orWhereNull('status');
+            })
+            ->get();
+
+        /* ══════════════════════════════════════════════
+           INACTIVE EMPLOYEES
+        ══════════════════════════════════════════════ */
+
+        $inactiveEmployees = collect();
+
+        if ($isAdmin) {
+
+            $inactiveEmployees = Employee::with([
+                    'statusLogs' => function ($q) {
+
+                        $q->with(
+                            'changedBy',
+                            'approvedBy',
+                            'reactivatedBy'
+                        )->latest();
+                    }
+                ])
+                ->whereIn('status', self::INACTIVE)
                 ->get();
         }
+
+        /* ══════════════════════════════════════════════
+           ATTENDANCE
+        ══════════════════════════════════════════════ */
+
+        $attendances = AttendanceDetail::whereBetween(
+                'punch_in_time',
+                [$startDate, $endDate]
+            )
+            ->get();
+
+        /* ══════════════════════════════════════════════
+           LEAVES
+        ══════════════════════════════════════════════ */
+
+        $leaves = LeaveRequest::where('status', 'approved')
+            ->where(function ($q) use ($startDate, $endDate) {
+
+                $q->whereBetween('date_from', [$startDate, $endDate])
+
+                  ->orWhereBetween('date_to', [$startDate, $endDate])
+
+                  ->orWhere(function ($q2) use ($startDate, $endDate) {
+
+                      $q2->where('date_from', '<', $startDate)
+                         ->where('date_to', '>', $endDate);
+                  });
+            })
+            ->get();
+
+        /* ══════════════════════════════════════════════
+           ATTENDANCE DETAILS
+        ══════════════════════════════════════════════ */
+
+        $attendanceDetails = $employees->map(function (
+            $employee
+        ) use (
+            $attendances,
+            $leaves,
+            $statusFilter
+        ) {
+
+            $attendance = $attendances->firstWhere(
+                'user_id',
+                $employee->user_id
+            );
+
+            $leave = $leaves->firstWhere(
+                'user_id',
+                $employee->user_id
+            );
+
+            /* PRESENT */
+
+            if ($attendance) {
+
+                if (
+                    $statusFilter &&
+                    $attendance->status != $statusFilter
+                ) {
+                    return null;
+                }
+
+                return (object) [
+
+                    'user'               => $employee,
+
+                    'punch_in_time'      => $attendance->punch_in_time,
+
+                    'punch_out_time'     => $attendance->punch_out_time,
+
+                    'punch_in_image'     => $attendance->punch_in_image,
+
+                    'punch_out_image'    => $attendance->punch_out_image,
+
+                    'punch_in_location'  => $attendance->punch_in_location,
+
+                    'punch_out_location' => $attendance->punch_out_location,
+
+                    'status'             => $attendance->status,
+                ];
+            }
+
+            /* LEAVE */
+
+            if ($leave) {
+
+                if (
+                    $statusFilter &&
+                    $statusFilter != 'leave'
+                ) {
+                    return null;
+                }
+
+                return (object) [
+
+                    'user'         => $employee,
+
+                    'status'       => 'leave',
+
+                    'leave_detail' => $leave,
+                ];
+            }
+
+            /* ABSENT */
+
+            if (
+                $statusFilter &&
+                $statusFilter != 'absent'
+            ) {
+                return null;
+            }
+
+            return (object) [
+
+                'user'   => $employee,
+
+                'status' => 'absent',
+            ];
+
+        })->filter();
+
+        /* ══════════════════════════════════════════════
+           TOTALS
+        ══════════════════════════════════════════════ */
+
+        $totalEmployees = $employees->count();
+
+        $totalPunchIn = $attendanceDetails
+            ->whereNotNull('punch_in_time')
+            ->count();
+
+        $totalPunchOut = $attendanceDetails
+            ->whereNotNull('punch_out_time')
+            ->count();
+
+        $totalPresent = $attendanceDetails
+            ->where('status', 'present')
+            ->count();
+
+        $totalAbsent = $attendanceDetails
+            ->where('status', 'absent')
+            ->count();
+
+        $totalHalf = $attendanceDetails
+            ->where('status', 'half_time')
+            ->count();
+
+        $totalLeave = $attendanceDetails
+            ->where('status', 'leave')
+            ->count();
+
+        $absentEmployees = $attendanceDetails
+            ->where('status', 'absent')
+            ->map(function ($att) {
+
+                return $att->user->full_name
+                    ?? $att->user->name;
+            });
+
+        /* ══════════════════════════════════════════════
+           GROUP TASK DASHBOARD
+        ══════════════════════════════════════════════ */
+
+        $taskDashboardQuery = GroupTask::query()
+            ->with([
+                'group',
+                'createdBy',
+                'assignees',
+                'acceptedBy',
+                'completedBy'
+            ]);
+
+        // NON ADMIN → only related tasks
+        if (!$isAdmin && $user) {
+
+            $taskDashboardQuery->where(function ($q) use ($user) {
+
+                $q->where('created_by_id', $user->id)
+
+                  ->orWhere('accepted_by_id', $user->id)
+
+                  ->orWhere('completed_by_id', $user->id)
+
+                  ->orWhereHas('assignees', function ($a) use ($user) {
+
+                      $a->where('users.id', $user->id);
+                  })
+
+                  ->orWhereHas('group.members', function ($g) use ($user) {
+
+                      $g->where('users.id', $user->id);
+                  });
+            });
+        }
+
+        $taskDashboardTasks = (clone $taskDashboardQuery)
+            ->latest()
+            ->take(20)
+            ->get();
+
+        $taskDashboardGroupsQuery = TaskGroup::withCount(['members', 'tasks'])
+            ->with(['members' => function ($q) {
+                $q->activeEmployees()->select('users.id', 'users.name');
+            }])
+            ->where('is_active', true);
+
+        if (!$isAdmin && $user) {
+            $taskDashboardGroupsQuery->whereHas('members', function ($q) use ($user) {
+                $q->where('users.id', $user->id);
+            });
+        }
+
+        $taskDashboardGroups = $taskDashboardGroupsQuery
+            ->latest()
+            ->take(12)
+            ->get();
+
+        $taskSummary = [
+
+            'total' => (clone $taskDashboardQuery)
+                ->count(),
+
+            'pending' => (clone $taskDashboardQuery)
+                ->where('status', 'pending')
+                ->count(),
+
+            'accepted' => (clone $taskDashboardQuery)
+                ->where('status', 'accepted')
+                ->count(),
+
+            'completed' => (clone $taskDashboardQuery)
+                ->where('status', 'completed')
+                ->count(),
+
+            'delayed' => (clone $taskDashboardQuery)
+                ->where('status', 'accepted')
+                ->get()
+                ->filter
+                ->is_delayed
+                ->count(),
+        ];
+
+        /* ══════════════════════════════════════════════
+           RETURN VIEW
+        ══════════════════════════════════════════════ */
+
+        return view('home', compact(
+
+            'totalEmployees',
+
+            'totalPunchIn',
+
+            'totalPunchOut',
+
+            'attendanceDetails',
+
+            'filter',
+
+            'customFrom',
+
+            'customTo',
+
+            'statusFilter',
+
+            'totalPresent',
+
+            'totalAbsent',
+
+            'totalHalf',
+
+            'totalLeave',
+
+            'absentEmployees',
+
+            'inactiveEmployees',
+
+            'birthdayEmployees',
+
+            'anniversaryEmployees',
+
+            'taskDashboardTasks',
+
+            'taskSummary',
+
+            'taskDashboardGroups'
+        ));
     }
 
-    /* ================= 🎉 MULTI CELEBRATION LOGIC ================= */
-    $today = Carbon::today();
+    /* ══════════════════════════════════════════════
+       AJAX — Approve a status change
+    ══════════════════════════════════════════════ */
 
-    $birthdayEmployees = Employee::whereMonth('date_of_birth', $today->month)
-        ->whereDay('date_of_birth', $today->day)
-        ->get();
+    public function approveStatus(
+        Request $request,
+        Employee $employee
+    ) {
 
-    $anniversaryEmployees = Employee::whereMonth('anniversary_date', $today->month)
-        ->whereDay('anniversary_date', $today->day)
-        ->get();
+        $user = auth()->user();
 
-    /* ================= RETURN VIEW ================= */
-    return view('home', compact(
-        'users',
-        'attendances',
-        'selectedUserId',
-        'monthlyData',
-        'selectedDate',
-        'monthInput',
-        'birthdayEmployees',
-        'anniversaryEmployees'
-    ));
-}
+        // Permission check
+        if (!$user->can('approve employee status')) {
 
-    public function saveAttendance(Request $request)
-{
-    $request->validate([
-        'user_id' => 'required|exists:users,id',
-        'date' => 'required|date',
-        'status' => 'required|string',
-        'time' => 'nullable'
-    ]);
+            return response()->json([
 
-    $date = Carbon::parse($request->date);
-    $punchIn = $request->time 
-        ? Carbon::parse($request->date . ' ' . $request->time)
-        : $date->copy()->startOfDay();
+                'success' => false,
 
-    // Find existing attendance record for this user and date
-    $attendance = AttendanceDetail::where('user_id', $request->user_id)
-        ->whereDate('punch_in_time', $date->toDateString())
-        ->first();
+                'message' =>
+                    'You do not have permission to approve.'
 
-    if ($attendance) {
-        // Update only the status for existing record
-        $attendance->status = $request->status;
-        $attendance->save();
+            ], 403);
+        }
+
+        $log = EmployeeStatusLog::where(
+                'employee_id',
+                $employee->id
+            )
+            ->whereNull('approved_by')
+            ->latest()
+            ->first();
+
+        if (!$log) {
+
+            return response()->json([
+
+                'success' => false,
+
+                'message' => 'No pending status found.'
+            ]);
+        }
+
+        $log->update([
+
+            'approved_by' => $user->id,
+
+            'approved_at' => now(),
+        ]);
+
+        $employee->update([
+
+            'status_change_pending' => false
+        ]);
 
         return response()->json([
+
             'success' => true,
-            'message' => 'Attendance status updated successfully!'
+
+            'message' =>
+                'Status approved successfully.'
         ]);
     }
 
-    // Create new record if none exists
-    $attendance = new AttendanceDetail([
-        'user_id' => $request->user_id,
-        'punch_in_time' => $punchIn,
-        'status' => $request->status,
-        'punch_in_latitude' => null,
-        'punch_in_longitude' => null,
-        'punch_in_location' => 'Manual Entry'
-    ]);
+    /* ══════════════════════════════════════════════
+       AJAX — Reactivate an employee
+    ══════════════════════════════════════════════ */
 
-    $attendance->save();
+    public function reactivateEmployee(
+        Request $request,
+        Employee $employee
+    ) {
 
-    return response()->json([
-        'success' => true,
-        'message' => 'New attendance record created successfully!'
-    ]);
-}
+        $oldStatus = $employee->status;
+
+        $employee->update([
+
+            'status' => 'Active',
+
+            'status_change_pending' => false,
+        ]);
+
+        EmployeeStatusLog::create([
+
+            'employee_id' => $employee->id,
+
+            'old_status' => $oldStatus,
+
+            'new_status' => 'Active',
+
+            'changed_by' => auth()->id(),
+
+            'reactivated_by' => auth()->id(),
+
+            'remarks' => $request->input(
+                'remarks',
+                'Reactivated by admin.'
+            ),
+
+            'changed_at' => now(),
+
+            'reactivated_at' => now(),
+        ]);
+
+        return response()->json([
+
+            'success' => true,
+
+            'message' =>
+                "Employee {$employee->full_name} reactivated successfully.",
+        ]);
+    }
+
+    /* ══════════════════════════════════════════════
+       AJAX — Inactive employees list
+    ══════════════════════════════════════════════ */
+
+    public function inactiveList()
+    {
+        $employees = Employee::with([
+
+                'statusLogs' => function ($q) {
+
+                    $q->with(
+                        'changedBy',
+                        'approvedBy',
+                        'reactivatedBy'
+                    )->latest();
+                }
+            ])
+            ->whereIn('status', self::INACTIVE)
+            ->get()
+
+            ->map(function ($emp) {
+
+                $latestLog =
+                    $emp->statusLogs->first();
+
+                return [
+
+                    'id' => $emp->id,
+
+                    'full_name' => $emp->full_name,
+
+                    'department' => $emp->department,
+
+                    'position' => $emp->position,
+
+                    'status' => $emp->status,
+
+                    'status_change_pending' =>
+                        $emp->status_change_pending,
+
+                    'status_logs' => $latestLog ? [[
+
+                        'changed_by_name' =>
+                            optional(
+                                $latestLog->changedBy
+                            )->name,
+
+                        'approved_by_name' =>
+                            optional(
+                                $latestLog->approvedBy
+                            )->name,
+
+                        'changed_at' =>
+                            $latestLog->changed_at,
+
+                        'approved_at' =>
+                            $latestLog->approved_at,
+
+                    ]] : [],
+                ];
+            });
+
+        return response()->json($employees);
+    }
 }

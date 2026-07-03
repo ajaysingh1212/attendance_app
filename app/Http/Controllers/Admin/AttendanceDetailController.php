@@ -15,6 +15,7 @@ use App\Models\Employee;
 use App\Models\Holiday;
 use App\Models\LeaveRequest;
 use App\Models\User;
+use App\Services\PayrollCalculator;
 use Carbon\Carbon;
 use Gate;
 use Illuminate\Http\Request;
@@ -36,9 +37,14 @@ class AttendanceDetailController extends Controller
     {
         abort_if(Gate::denies('attendance_detail_access'), Response::HTTP_FORBIDDEN, '403 Forbidden');
 
-        $users = auth()->user()->is_admin ? User::orderBy('name')->get() : null;
+        $users = auth()->user()->is_admin
+            ? User::whereHas('employee')->orderBy('name')->get()
+            : null;
+        $defaultUserId = auth()->user()->is_admin
+            ? ($users->first()?->id ?? auth()->id())
+            : auth()->id();
 
-        return view('admin.attendanceDetails.index', compact('users'));
+        return view('admin.attendanceDetails.index', compact('users', 'defaultUserId'));
     }
 
     /*
@@ -72,7 +78,9 @@ class AttendanceDetailController extends Controller
               });
         })->get();
 
-        $leaveRequests = LeaveRequest::where('user_id', $user->id)
+        $leaveRequests = LeaveRequest::with('leaveType')
+            ->where('user_id', $user->id)
+            ->whereRaw("LOWER(TRIM(status)) = 'approved'")
             ->where(function ($q) use ($startStr, $endStr) {
                 $q->whereBetween('date_from', [$startStr, $endStr])
                   ->orWhereBetween('date_to',   [$startStr, $endStr])
@@ -83,10 +91,22 @@ class AttendanceDetailController extends Controller
 
         $leaveDates = [];
         foreach ($leaveRequests as $leave) {
+            $isPaidLeave = \App\Models\LeaveType::isPaidName($leave->leaveType->name ?? null);
             $from = Carbon::parse($leave->date_from);
             $to   = Carbon::parse($leave->date_to);
             for ($d = $from->copy(); $d->lte($to); $d->addDay()) {
-                $leaveDates[$d->toDateString()] = $leave->title . ' (' . ucfirst($leave->status) . ')';
+                $date = $d->toDateString();
+                $existingIsPaid = isset($leaveDates[$date])
+                    && $leaveDates[$date]['class'] === 'paid_leave';
+                $dateIsPaid = isset($leaveDates[$date])
+                    ? ($existingIsPaid && $isPaidLeave)
+                    : $isPaidLeave;
+
+                $leaveDates[$date] = [
+                    'class' => $dateIsPaid ? 'paid_leave' : 'unpaid_leave',
+                    'title' => $dateIsPaid ? 'Paid Leave' : 'Unpaid Leave',
+                    'type'  => $leave->leaveType->name ?? $leave->title,
+                ];
             }
         }
 
@@ -105,7 +125,16 @@ class AttendanceDetailController extends Controller
             $dateStr  = $d->toDateString();
             $isSunday = $d->isSunday();
 
-            if ($attendances->has($dateStr)) {
+            // Approved leave has priority. Otherwise normal attendance decides.
+            if (isset($leaveDates[$dateStr])) {
+                $leave = $leaveDates[$dateStr];
+                $events[] = [
+                    'title'      => $leave['title'],
+                    'start'      => $dateStr,
+                    'classNames' => [$leave['class']],
+                    'extendedProps' => ['leave_type' => $leave['type']],
+                ];
+            } elseif ($attendances->has($dateStr)) {
                 $rec    = $attendances[$dateStr];
                 $status = strtolower($rec->status ?? 'present');
                 $title  = $isSunday ? ucfirst($status) . ' (Week Off)' : ucfirst($status);
@@ -127,12 +156,6 @@ class AttendanceDetailController extends Controller
                         'is_national'  => $holiday->is_national,
                     ],
                 ];
-            } elseif (isset($leaveDates[$dateStr])) {
-                $events[] = [
-                    'title'      => $leaveDates[$dateStr],
-                    'start'      => $dateStr,
-                    'classNames' => ['leave'],
-                ];
             } elseif ($isSunday) {
                 $events[] = [
                     'title'      => 'Week Off',
@@ -149,6 +172,35 @@ class AttendanceDetailController extends Controller
         }
 
         return response()->json($events);
+    }
+
+    public function summary(Request $request, PayrollCalculator $calculator)
+    {
+        $validated = $request->validate([
+            'user_id' => 'required|integer|exists:users,id',
+            'month' => 'required|integer|min:1|max:12',
+            'year' => 'required|integer|min:2000|max:2100',
+        ]);
+
+        if (!auth()->user()->is_admin && auth()->id() !== (int) $validated['user_id']) {
+            abort(403, 'Unauthorized access.');
+        }
+
+        $employee = Employee::where('user_id', $validated['user_id'])->firstOrFail();
+        $calculation = $calculator->calculate(
+            $employee,
+            (int) $validated['month'],
+            (int) $validated['year']
+        );
+
+        return response()->json([
+            'employee' => [
+                'id' => $employee->id,
+                'name' => $employee->full_name,
+                'employee_code' => $employee->employee_code,
+            ],
+            'calculation' => $calculation,
+        ]);
     }
 
     /*
