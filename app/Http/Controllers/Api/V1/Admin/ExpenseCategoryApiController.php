@@ -3,54 +3,55 @@
 namespace App\Http\Controllers\Api\V1\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\StoreExpenseCategoryRequest;
-use App\Http\Requests\UpdateExpenseCategoryRequest;
-use App\Http\Resources\Admin\ExpenseCategoryResource;
 use App\Models\ExpenseCategory;
-use Gate;
-use Illuminate\Http\Request;
-use Symfony\Component\HttpFoundation\Response;
+use Illuminate\Http\JsonResponse;
 
 class ExpenseCategoryApiController extends Controller
 {
-    public function index()
+    /**
+     * Get all expense categories
+     */
+    public function index(): JsonResponse
     {
-        abort_if(Gate::denies('expense_category_access'), Response::HTTP_FORBIDDEN, '403 Forbidden');
+        try {
+            $categories = ExpenseCategory::select('id', 'name', 'created_at', 'updated_at', 'deleted_at')
+                ->get();
 
-        return new ExpenseCategoryResource(ExpenseCategory::all());
+            return response()->json([
+                'success' => true,
+                'data' => $categories,
+            ], 200);
+
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch categories',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
-
-    public function store(StoreExpenseCategoryRequest $request)
+    
+    
+    public function getAllCategories(): JsonResponse
     {
-        $expenseCategory = ExpenseCategory::create($request->all());
+        try {
+            $categories = ExpenseCategory::select('id', 'name', 'created_at', 'updated_at', 'deleted_at')
+                ->get();
 
-        return (new ExpenseCategoryResource($expenseCategory))
-            ->response()
-            ->setStatusCode(Response::HTTP_CREATED);
+            return response()->json([
+                'success' => true,
+                'data' => $categories
+            ], Response::HTTP_OK);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch categories',
+                'error' => $e->getMessage()
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
     }
-
-    public function show(ExpenseCategory $expenseCategory)
-    {
-        abort_if(Gate::denies('expense_category_show'), Response::HTTP_FORBIDDEN, '403 Forbidden');
-
-        return new ExpenseCategoryResource($expenseCategory);
-    }
-
-    public function update(UpdateExpenseCategoryRequest $request, ExpenseCategory $expenseCategory)
-    {
-        $expenseCategory->update($request->all());
-
-        return (new ExpenseCategoryResource($expenseCategory))
-            ->response()
-            ->setStatusCode(Response::HTTP_ACCEPTED);
-    }
-
-    public function destroy(ExpenseCategory $expenseCategory)
-    {
-        abort_if(Gate::denies('expense_category_delete'), Response::HTTP_FORBIDDEN, '403 Forbidden');
-
-        $expenseCategory->delete();
-
-        return response(null, Response::HTTP_NO_CONTENT);
-    }
+    
+    
+    
 }

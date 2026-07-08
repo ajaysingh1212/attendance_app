@@ -15,6 +15,8 @@ use Symfony\Component\HttpFoundation\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
 
+use Illuminate\Support\Facades\Log;
+
 class UsersApiController extends Controller
 {
     use MediaUploadingTrait;
@@ -81,78 +83,159 @@ class UsersApiController extends Controller
     
     
     public function login(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'email'    => 'required|email',
-            'password' => 'required'
-        ]);
-    
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
-        }
-    
-        if (!Auth::attempt($request->only('email', 'password'))) {
-            return response()->json(['message' => 'Invalid credentials'], 401);
-        }
-    
-        $user = Auth::user()->load(['roles', 'employee.branch']); // roles + employee + branch
-        $token = $user->createToken('api-token')->plainTextToken;
-    
-        return response()->json([
-        'token'  => $token,
-        'user'   => $user,
-        'roles'  => $user->roles->pluck('title'),
-        // 'branch' => $user->employee ? $user->employee->branch : null, // ye line hata do
-        ]);
+{
+    $validator = Validator::make($request->all(), [
+        'email'    => 'required|email',
+        'password' => 'required'
+    ]);
+
+    if ($validator->fails()) {
+        return response()->json(['errors' => $validator->errors()], 422);
     }
+
+    if (!Auth::attempt($request->only('email', 'password'))) {
+        return response()->json(['message' => 'Invalid credentials'], 401);
+    }
+
+    $user = Auth::user();
+
+    if ($user->status == '0') {
+        Auth::logout();
+        return response()->json(['message' => 'Your account is inactive. Please contact admin.'], 403);
+    }
+
+    // Load relations
+    $user->load(['roles', 'employee.branch', 'media']);
+
+    // 🔹 IMAGE TRANSFORM (MAIN FIX)
+    $image = null;
+    $media = $user->getFirstMedia('image');
+    if ($media) {
+        $image = [
+            'url' => $media->getFullUrl(),
+        ];
+    }
+
+    $token = $user->createToken('api-token')->plainTextToken;
+
+    return response()->json([
+        'token' => $token,
+        'user'  => array_merge(
+            $user->toArray(),
+            ['image' => $image] // 👈 overwrite image
+        ),
+        'roles' => $user->roles->pluck('title'),
+    ]);
+}
+
 
     
     
     public function getUserById($id)
-    {
-        // Load roles, employee and branch (same as login)
-        $user = User::with(['roles', 'employee.branch', 'media'])->find($id);
-    
-        if (!$user) {
-            return response()->json(['message' => 'User not found'], 404);
-        }
-    
-        // Return in same structure as login
-        return response()->json([
-            'user'  => $user,
-            'roles' => $user->roles->pluck('title'),
-        ]);
+{
+    $user = User::with(['roles', 'employee.branch', 'media'])->find($id);
+
+    if (!$user) {
+        return response()->json(['message' => 'User not found'], 404);
     }
+
+    // 🔹 IMAGE TRANSFORM
+    $image = null;
+    $media = $user->getFirstMedia('image');
+    if ($media) {
+        $image = [
+            'url' => $media->getFullUrl(),
+        ];
+    }
+
+    return response()->json([
+        'user' => array_merge(
+            $user->toArray(),
+            ['image' => $image]
+        ),
+        'roles' => $user->roles->pluck('title'),
+    ]);
+}
+
+
     
     
     public function updateUserImage(Request $request, $id)
-    {
+{
+    Log::info('🔵 updateUserImage called', [
+        'user_id' => $id,
+        'has_file' => $request->hasFile('image'),
+        'all_files' => $request->allFiles(),
+    ]);
+
+    try {
         $user = User::find($id);
-    
+
         if (!$user) {
+            Log::error('❌ User not found', ['user_id' => $id]);
             return response()->json(['message' => 'User not found'], 404);
         }
-    
-        // Validate that an image file is sent
-        $request->validate([
-            'image' => 'required|image|max:2048', // max 2MB
+
+        // 🔹 Validate
+        $validator = Validator::make($request->all(), [
+            'image' => 'required|image|mimes:jpg,jpeg,png,webp|max:5120', // 5MB
         ]);
-    
-        if ($request->hasFile('image')) {
-            // Delete old image if exists
-            if ($user->image) {
-                $user->image->delete();
-            }
-    
-            // Add new image to media collection
-            $user->addMediaFromRequest('image')->toMediaCollection('image');
+
+        if ($validator->fails()) {
+            Log::error('❌ Image validation failed', [
+                'errors' => $validator->errors()->toArray(),
+            ]);
+
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
         }
-    
+
+        if (!$request->hasFile('image')) {
+            Log::error('❌ image file missing in request');
+            return response()->json(['message' => 'Image file not found'], 400);
+        }
+
+        // 🔹 Delete old image
+        if ($user->getFirstMedia('image')) {
+            Log::info('🟡 Deleting old image', [
+                'media_id' => $user->getFirstMedia('image')->id
+            ]);
+            $user->clearMediaCollection('image');
+        }
+
+        // 🔹 Upload new image
+        $media = $user
+            ->addMediaFromRequest('image')
+            ->toMediaCollection('image');
+
+        Log::info('✅ Image uploaded successfully', [
+            'media_id' => $media->id,
+            'url' => $media->getFullUrl(),
+        ]);
+
         return response()->json([
             'message' => 'Profile image updated successfully',
-            'image_url' => $user->getFirstMediaUrl('image'),
+            'image' => [
+                'url' => $media->getFullUrl(),
+            ]
         ]);
+
+    } catch (\Throwable $e) {
+        Log::error('🔥 Image upload exception', [
+            'message' => $e->getMessage(),
+            'file' => $e->getFile(),
+            'line' => $e->getLine(),
+            'trace' => $e->getTraceAsString(),
+        ]);
+
+        return response()->json([
+            'message' => 'Image upload failed. Check server logs.',
+        ], 500);
     }
+}
+
 
 
 }

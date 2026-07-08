@@ -4,11 +4,8 @@ namespace App\Http\Controllers\Api\V1\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Traits\MediaUploadingTrait;
-use App\Http\Requests\StoreExpenseRequest;
-use App\Http\Requests\UpdateExpenseRequest;
-use App\Http\Resources\Admin\ExpenseResource;
 use App\Models\Expense;
-use Gate;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -16,59 +13,106 @@ class ExpenseApiController extends Controller
 {
     use MediaUploadingTrait;
 
-    public function index()
+    // ✅ Submit Expense API (Multipart-ready)
+    public function submitExpense(Request $request)
     {
-        abort_if(Gate::denies('expense_access'), Response::HTTP_FORBIDDEN, '403 Forbidden');
+        // Validate input
+        $data = $request->validate([
+            'user_id'             => 'required|exists:users,id',
+            'expense_category_id' => 'required|exists:expense_categories,id',
+            'entry_date'          => 'required|date',
+            'amount'              => 'required|numeric|min:1',
+            'description'         => 'nullable|string',
+            'status'              => 'in:pending,accept,reject',
+            'upload_image'        => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:10240', // max 10MB
+        ]);
 
-        return new ExpenseResource(Expense::with(['user', 'expense_category'])->get());
-    }
+        // Auto fetch employee_id from user
+        $user = User::find($data['user_id']);
+        $data['employee_id'] = $user && $user->employee ? $user->employee->id : null;
 
-    public function store(StoreExpenseRequest $request)
-    {
-        $expense = Expense::create($request->all());
+        // Default status
+        $data['status'] = $data['status'] ?? 'pending';
 
-        if ($request->input('upload_image', false)) {
-            $expense->addMedia(storage_path('tmp/uploads/' . basename($request->input('upload_image'))))->toMediaCollection('upload_image');
-        }
+        // Create Expense
+        $expense = Expense::create($data);
 
-        return (new ExpenseResource($expense))
-            ->response()
-            ->setStatusCode(Response::HTTP_CREATED);
-    }
-
-    public function show(Expense $expense)
-    {
-        abort_if(Gate::denies('expense_show'), Response::HTTP_FORBIDDEN, '403 Forbidden');
-
-        return new ExpenseResource($expense->load(['user', 'expense_category']));
-    }
-
-    public function update(UpdateExpenseRequest $request, Expense $expense)
-    {
-        $expense->update($request->all());
-
-        if ($request->input('upload_image', false)) {
-            if (! $expense->upload_image || $request->input('upload_image') !== $expense->upload_image->file_name) {
-                if ($expense->upload_image) {
-                    $expense->upload_image->delete();
-                }
-                $expense->addMedia(storage_path('tmp/uploads/' . basename($request->input('upload_image'))))->toMediaCollection('upload_image');
+        // Handle file upload
+        if ($request->hasFile('upload_image')) {
+            try {
+                $expense->addMedia($request->file('upload_image'))
+                        ->toMediaCollection('upload_image');
+            } catch (\Exception $e) {
+                \Log::error('Media upload failed: '.$e->getMessage());
             }
-        } elseif ($expense->upload_image) {
-            $expense->upload_image->delete();
         }
 
-        return (new ExpenseResource($expense))
-            ->response()
-            ->setStatusCode(Response::HTTP_ACCEPTED);
+        return response()->json([
+            'message' => 'Expense submitted successfully',
+            'data' => [
+                'id'          => $expense->id,
+                'amount'      => $expense->amount,
+                'description' => $expense->description,
+                'status'      => $expense->status,
+                'created_at'  => $expense->created_at->toDateTimeString(),
+            ],
+        ], Response::HTTP_CREATED);
     }
 
-    public function destroy(Expense $expense)
+    // Expense History by User
+    public function expenseHistory($userId)
     {
-        abort_if(Gate::denies('expense_delete'), Response::HTTP_FORBIDDEN, '403 Forbidden');
-
-        $expense->delete();
-
-        return response(null, Response::HTTP_NO_CONTENT);
+        $expenses = Expense::where('user_id', $userId)
+                    ->orderBy('created_at', 'desc')
+                    ->get();
+    
+        $result = $expenses->map(function($expense) {
+            return [
+                'amount'      => $expense->amount,
+                'description' => $expense->description,
+                'status'      => $expense->status,
+                'created_at'  => $expense->created_at->toDateTimeString(),
+                'upload_image'=> $expense->upload_image ? $expense->upload_image->url : null,
+            ];
+        });
+    
+        return response()->json([
+            'data' => $result
+        ], Response::HTTP_OK);
     }
+    
+    
+    // ✅ Balance API
+    public function getBalance($userId)
+    {
+        // Approved credits
+        $totalCredit = \App\Models\AddRequestAmount::where('user_id', $userId)
+                        ->where('status', 'accept')
+                        ->sum('amount');
+    
+        // Approved expenses
+        $totalExpense = \App\Models\Expense::where('user_id', $userId)
+                        ->where('status', 'accept')
+                        ->sum('amount');
+    
+        // ✅ Logic
+        if ($totalExpense > $totalCredit) {
+            $availableBalance = 0;  // jitna mila tha wo pura khatam
+            $unbilledBalance  = $totalExpense - $totalCredit; // pocket se lag gya
+        } else {
+            $availableBalance = $totalCredit - $totalExpense; // abhi bacha hua
+            $unbilledBalance  = 0; // credit ke andar hi kharch hua
+        }
+    
+        return response()->json([
+            'data' => [
+                'available_balance' => $availableBalance,
+                'unbilled_balance'  => $unbilledBalance,
+            ]
+        ], Response::HTTP_OK);
+    }
+
+
+
+
 }

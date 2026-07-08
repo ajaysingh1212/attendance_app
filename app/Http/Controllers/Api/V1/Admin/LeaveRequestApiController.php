@@ -75,31 +75,44 @@ class LeaveRequestApiController extends Controller
     
     public function submitLeaveRequest(Request $request)
     {
+        // ✅ Validate request
         $request->validate([
-            'user_id'     => 'required|exists:users,id',
-            'title'       => 'required|string',
-            'description' => 'nullable|string',
-            'date_from'   => 'required|date',
-            'date_to'     => 'required|date|after_or_equal:date_from',
-            'status'      => 'nullable|in:pending,approved,reject',
-            'remark'      => 'nullable|string',
-            'attachment'  => 'nullable|string', // file path from tmp upload
+            'user_id'       => 'required|exists:users,id',
+            'leave_type_id' => 'required|string',
+            'description'   => 'nullable|string',
+            'date_from'     => 'required|date',
+            'date_to'       => 'required|date|after_or_equal:date_from',
+            'status'        => 'nullable|in:pending,approved,reject',
+            'remark'        => 'nullable|string',
+            'attachment'    => 'nullable|file|mimes:jpg,jpeg,png,pdf', // ✅ file validation
         ]);
     
-        $leaveRequest = LeaveRequest::create($request->all());
+        // ✅ Create leave request
+        $leaveRequest = LeaveRequest::create([
+            'user_id'       => $request->input('user_id'),
+            'leave_type_id' => $request->input('leave_type_id'),
+            'description'   => $request->input('description'),
+            'date_from'     => $request->input('date_from'),
+            'date_to'       => $request->input('date_to'),
+            'status'        => $request->input('status', 'pending'),
+            'remark'        => $request->input('remark'),
+        ]);
     
-        if ($request->input('attachment')) {
+        // ✅ Handle attachment if exists
+        if ($request->hasFile('attachment')) {
             $leaveRequest
-                ->addMedia(storage_path('tmp/uploads/' . basename($request->input('attachment'))))
+                ->addMediaFromRequest('attachment') // uses spatie/medialibrary
                 ->toMediaCollection('attachment');
         }
     
+        // ✅ Return success response
         return response()->json([
             'success' => true,
             'message' => 'Leave request submitted successfully',
             'data'    => new \App\Http\Resources\Admin\LeaveRequestResource($leaveRequest),
         ], 201);
     }
+
     
     public function getLeaveRequestsByUser($userId)
     {

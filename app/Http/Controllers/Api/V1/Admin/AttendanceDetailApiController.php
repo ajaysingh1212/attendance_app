@@ -14,6 +14,20 @@ use Symfony\Component\HttpFoundation\Response;
 
 use Illuminate\Support\Carbon;
 
+use App\Mail\AdminDailyAttendanceMail;
+
+use App\Mail\AttendancePunchMail;
+use App\Mail\UserMonthlyAttendanceMail;
+use Illuminate\Support\Facades\Mail;
+use App\Models\User;
+
+use Illuminate\Support\Facades\Log;
+
+use Barryvdh\DomPDF\Facade\Pdf;
+
+
+
+
 class AttendanceDetailApiController extends Controller
 {
     use MediaUploadingTrait;
@@ -100,6 +114,7 @@ class AttendanceDetailApiController extends Controller
         ]);
     
         try {
+            $user = User::find($request->user_id);
             $employee = \App\Models\Employee::where('user_id', $request->user_id)->first();
             if (!$employee) {
                 return response()->json([
@@ -153,6 +168,40 @@ class AttendanceDetailApiController extends Controller
                     'late_by_minutes'     => $lateMinutes,  // <-- नया field डाल दिया
                     'total_work_minutes'  => 0,
                 ]);
+                
+                // ✅ FAIL-SAFE MAIL AFTER PUNCH IN
+                if ($user && $user->email) {
+                    try {
+                        Mail::to($user->email)->send(
+                            new AttendancePunchMail(
+                                $user,
+                                'punch_in',
+                                [
+                                    'time'              => $now->format('d-m-Y H:i:s'),
+                                    'ip'                => request()->ip(),
+                                    'user_agent'        => request()->userAgent(),
+                
+                                    'latitude'          => $request->latitude,
+                                    'longitude'         => $request->longitude,
+                                    'location'          => $request->location,
+                
+                                    'expected_in'       => $employee->work_start_time,
+                                    'actual_in'         => $now->format('H:i:s'),
+                                    'late_by_minutes'   => $lateMinutes,
+                
+                                    'status'            => $status,
+                                    'type'              => 'self',
+                                ]
+                            )
+                        );
+                    } catch (\Exception $e) {
+                        \Log::error('Punch-in mail failed', [
+                            'user_id' => $user->id,
+                            'email'   => $user->email,
+                            'error'   => $e->getMessage(),
+                        ]);
+                    }
+                }
             
                 return response()->json([
                     'success'    => true,
@@ -161,38 +210,55 @@ class AttendanceDetailApiController extends Controller
                 ], 200);
             }
     
-    
             // CASE 2: Record exists but punch_out not done → Punch Out
             if ($attendance && !$attendance->punch_out_time) {
+            
+                // ✅ DEFAULT VALUES (VERY IMPORTANT)
+                $lateBy = 0;
+                $leftEarlyBy = 0;
+                $overtime = 0;
+            
                 $attendance->update([
-                    'punch_out_time'     => now(),
-                    'punch_out_latitude' => $request->latitude,
-                    'punch_out_longitude'=> $request->longitude,
-                    'punch_out_location' => $request->location,
+                    'punch_out_time'      => now(),
+                    'punch_out_latitude'  => $request->latitude,
+                    'punch_out_longitude' => $request->longitude,
+                    'punch_out_location'  => $request->location,
                 ]);
-    
+            
                 // Save punch_out image
                 if ($request->hasFile('punch_image')) {
                     $attendance->addMedia($request->file('punch_image'))
                         ->toMediaCollection('punch_out_image');
                 }
-    
+            
+                // ✅ FETCH LOG FIRST
                 $attendanceLog = \App\Models\AttendanceLog::where('user_id', $request->user_id)
                     ->where('date', $todayDate)
                     ->first();
-    
+            
+                // ✅ CALCULATIONS
                 if ($attendanceLog && !$attendanceLog->actual_out) {
-                    $actualIn  = \Carbon\Carbon::parse($attendanceLog->actual_in);
-                    $actualOut = now();
+            
+                    $actualIn   = \Carbon\Carbon::parse($attendanceLog->actual_in);
+                    $actualOut  = now();
                     $expectedIn = \Carbon\Carbon::parse($attendanceLog->expected_in);
-                    $expectedOut = \Carbon\Carbon::parse($attendanceLog->expected_out);
-    
-                    $lateBy = $actualIn->gt($expectedIn) ? $actualIn->diffInMinutes($expectedIn) : 0;
-                    $leftEarlyBy = $actualOut->lt($expectedOut) ? $expectedOut->diffInMinutes($actualOut) : 0;
+                    $expectedOut= \Carbon\Carbon::parse($attendanceLog->expected_out);
+            
+                    $lateBy = $actualIn->gt($expectedIn)
+                        ? $actualIn->diffInMinutes($expectedIn)
+                        : 0;
+            
+                    $leftEarlyBy = $actualOut->lt($expectedOut)
+                        ? $expectedOut->diffInMinutes($actualOut)
+                        : 0;
+            
                     $totalWork = $actualIn->diffInMinutes($actualOut);
                     $expectedWorkMinutes = $expectedIn->diffInMinutes($expectedOut);
-                    $overtime = $totalWork > $expectedWorkMinutes ? $totalWork - $expectedWorkMinutes : 0;
-    
+            
+                    $overtime = $totalWork > $expectedWorkMinutes
+                        ? $totalWork - $expectedWorkMinutes
+                        : 0;
+            
                     $attendanceLog->update([
                         'actual_out'            => $actualOut->format('H:i:s'),
                         'late_by_minutes'       => $lateBy,
@@ -201,13 +267,51 @@ class AttendanceDetailApiController extends Controller
                         'total_work_minutes'    => $totalWork,
                     ]);
                 }
-    
+            
+                // ✅ MAIL AFTER EVERYTHING IS READY
+                if ($user && $user->email) {
+                    try {
+                        Mail::to($user->email)->send(
+                            new AttendancePunchMail(
+                                $user,
+                                'punch_out',
+                                [
+                                    'time'              => now()->format('d-m-Y H:i:s'),
+                                    'ip'                => request()->ip(),
+                                    'user_agent'        => request()->userAgent(),
+            
+                                    'latitude'          => $request->latitude,
+                                    'longitude'         => $request->longitude,
+                                    'location'          => $request->location,
+            
+                                    'expected_out'      => $attendanceLog->expected_out ?? null,
+                                    'actual_out'        => now()->format('H:i:s'),
+            
+                                    'late_by_minutes'   => $lateBy,
+                                    'left_early_by'     => $leftEarlyBy,
+                                    'overtime'          => $overtime,
+            
+                                    'status'            => $attendance->status,
+                                    'type'              => 'self',
+                                ]
+                            )
+                        );
+                    } catch (\Exception $e) {
+                        \Log::error('Punch-out mail failed', [
+                            'user_id' => $user->id,
+                            'email'   => $user->email,
+                            'error'   => $e->getMessage(),
+                        ]);
+                    }
+                }
+            
                 return response()->json([
                     'success'    => true,
                     'message'    => 'Punch-out recorded successfully',
                     'attendance' => new AttendanceDetailResource($attendance)
                 ], 200);
             }
+
     
             // CASE 3: Already punched in and out → No more punches allowed
             return response()->json([
@@ -223,47 +327,196 @@ class AttendanceDetailApiController extends Controller
             ], 500);
         }
     }
+    
+    
+    
+    public function manualAttendance(Request $request)
+    {
+        $request->validate([
+            'user_id'   => 'required|exists:users,id',
+            'date'      => 'required|date',
+            'action'    => 'required|in:in,out', // नया field
+            'time'      => 'nullable|date_format:H:i',
+            'latitude'  => 'nullable|string',
+            'longitude' => 'nullable|string',
+            'location'  => 'nullable|string',
+            'image'     => 'nullable|file|image',
+        ]);
+    
+        try {
+            $employee = \App\Models\Employee::where('user_id', $request->user_id)->first();
+            if (!$employee) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Employee not found'
+                ], 404);
+            }
+    
+            $date = \Carbon\Carbon::parse($request->date)->format('Y-m-d');
+    
+            // Existing attendance
+            $attendance = \App\Models\AttendanceDetail::where('user_id', $request->user_id)
+                ->where('date', $date)
+                ->first();
+    
+            // Punch In/Out निकालना
+            $punchIn  = $attendance && $attendance->punch_in_time
+                ? \Carbon\Carbon::parse($attendance->punch_in_time)
+                : null;
+    
+            $punchOut = $attendance && $attendance->punch_out_time
+                ? \Carbon\Carbon::parse($attendance->punch_out_time)
+                : null;
+    
+            // नया action के हिसाब से set करना
+            if ($request->action === 'in' && $request->filled('time')) {
+                $punchIn = \Carbon\Carbon::parse($date.' '.$request->time);
+            }
+    
+            if ($request->action === 'out' && $request->filled('time')) {
+                $punchOut = \Carbon\Carbon::parse($date.' '.$request->time);
+            }
+    
+            // Expected times
+            $expectedIn  = \Carbon\Carbon::parse($date.' '.$employee->work_start_time);
+            $expectedOut = \Carbon\Carbon::parse($date.' '.$employee->work_end_time);
+    
+            // Status
+            $status = 'absent';
+            if ($punchIn) {
+                $lateMinutes = $punchIn->gt($expectedIn) ? $expectedIn->diffInMinutes($punchIn) : 0;
+                $status = ($lateMinutes > $employee->delay_time) ? 'half_time' : 'present';
+            }
+    
+            // Calculations
+            $lateBy    = ($punchIn && $punchIn->gt($expectedIn)) ? $punchIn->diffInMinutes($expectedIn) : 0;
+            $leftEarly = ($punchOut && $punchOut->lt($expectedOut)) ? $expectedOut->diffInMinutes($punchOut) : 0;
+            $totalWork = ($punchIn && $punchOut) ? $punchIn->diffInMinutes($punchOut) : 0;
+            $expectedWork = $expectedIn->diffInMinutes($expectedOut);
+            $overtime = ($totalWork > $expectedWork) ? $totalWork - $expectedWork : 0;
+    
+            // Attendance save/update
+            if (!$attendance) {
+                $attendance = \App\Models\AttendanceDetail::create([
+                    'user_id'     => $request->user_id,
+                    'employee_id' => $employee->id,
+                    'punch_in_time'   => $punchIn,
+                    'punch_out_time'  => $punchOut,
+                    'status'      => $status,
+                    'type'        => 'self',
+                    'date'        => $date,
+                ]);
+            } else {
+                $data = [
+                    'status' => $status,
+                    'type'   => 'self',
+                ];
+    
+                if ($request->action === 'in') {
+                    $data['punch_in_time']     = $punchIn;
+                    $data['punch_in_latitude'] = $request->latitude;
+                    $data['punch_in_longitude']= $request->longitude;
+                    $data['punch_in_location'] = $request->location;
+                }
+    
+                if ($request->action === 'out') {
+                    $data['punch_out_time']     = $punchOut;
+                    $data['punch_out_latitude'] = $request->latitude;
+                    $data['punch_out_longitude']= $request->longitude;
+                    $data['punch_out_location'] = $request->location;
+                }
+    
+                $attendance->update($data);
+            }
+    
+            // Save image
+            if ($request->hasFile('image')) {
+                if ($request->action === 'in') {
+                    $attendance->clearMediaCollection('punch_in_image');
+                    $attendance->addMedia($request->file('image'))
+                        ->toMediaCollection('punch_in_image');
+                }
+                if ($request->action === 'out') {
+                    $attendance->clearMediaCollection('punch_out_image');
+                    $attendance->addMedia($request->file('image'))
+                        ->toMediaCollection('punch_out_image');
+                }
+            }
+    
+            // Update Attendance Log
+            \App\Models\AttendanceLog::updateOrCreate(
+                ['user_id' => $request->user_id, 'date' => $date],
+                [
+                    'employee_id'          => $employee->id,
+                    'expected_in'          => $employee->work_start_time,
+                    'expected_out'         => $employee->work_end_time,
+                    'actual_in'            => $punchIn ? $punchIn->format('H:i:s') : null,
+                    'actual_out'           => $punchOut ? $punchOut->format('H:i:s') : null,
+                    'late_by_minutes'      => $lateBy,
+                    'left_early_by_minutes'=> $leftEarly,
+                    'overtime_by_minutes'  => $overtime,
+                    'total_work_minutes'   => $totalWork,
+                ]
+            );
+    
+            return response()->json([
+                'success'    => true,
+                'message'    => 'Manual attendance saved successfully',
+                'attendance' => new \App\Http\Resources\Admin\AttendanceDetailResource($attendance)
+            ], 200);
+    
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error while saving manual attendance',
+                'error'   => $e->getMessage()
+            ], 500);
+        }
+    }
+
+
+
 
 
 
     public function todayAttendance($userId)
-{
-    try {
-        $todayDate = now()->format('Y-m-d');
-
-        // ✅ AttendanceDetail fetch karo
-        $attendance = AttendanceDetail::with(['user'])
-            ->where('user_id', $userId)
-            ->where('date', $todayDate)
-            ->first();
-
-        // ✅ AttendanceLog fetch karo
-        $attendanceLog = \App\Models\AttendanceLog::where('user_id', $userId)
-            ->where('date', $todayDate)
-            ->first();
-
-        if (!$attendance && !$attendanceLog) {
+    {
+        try {
+            $todayDate = now()->format('Y-m-d');
+    
+            // ✅ AttendanceDetail fetch karo
+            $attendance = AttendanceDetail::with(['user'])
+                ->where('user_id', $userId)
+                ->where('date', $todayDate)
+                ->first();
+    
+            // ✅ AttendanceLog fetch karo
+            $attendanceLog = \App\Models\AttendanceLog::where('user_id', $userId)
+                ->where('date', $todayDate)
+                ->first();
+    
+            if (!$attendance && !$attendanceLog) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No attendance record found for today',
+                ], 404);
+            }
+    
+            return response()->json([
+                'success'        => true,
+                'message'        => 'Today\'s attendance fetched successfully',
+                'attendance'     => $attendance ? new AttendanceDetailResource($attendance) : null,
+                'attendance_log' => $attendanceLog ? $attendanceLog : null,
+            ], 200);
+    
+        } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'No attendance record found for today',
-            ], 404);
+                'message' => 'Error fetching attendance',
+                'error'   => $e->getMessage()
+            ], 500);
         }
-
-        return response()->json([
-            'success'        => true,
-            'message'        => 'Today\'s attendance fetched successfully',
-            'attendance'     => $attendance ? new AttendanceDetailResource($attendance) : null,
-            'attendance_log' => $attendanceLog ? $attendanceLog : null,
-        ], 200);
-
-    } catch (\Exception $e) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Error fetching attendance',
-            'error'   => $e->getMessage()
-        ], 500);
     }
-}
 
 
     public function attendanceReport($userId)
@@ -336,22 +589,395 @@ class AttendanceDetailApiController extends Controller
             ], 500);
         }
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     
     
+    public function fixEmployeeIds(Request $request)
+{
+    try {
+
+        $records = \App\Models\AttendanceDetail::get();
+
+        $updated = 0;
+        $skipped = 0;
+
+        foreach($records as $row){
+
+            $employee = \App\Models\Employee::where('user_id', $row->user_id)->first();
+
+            if($employee){
+                // update only if not same already
+                if($row->employee_id != $employee->id){
+                    $row->employee_id = $employee->id;
+                    $row->save();
+                    $updated++;
+                } else {
+                    $skipped++;
+                }
+            } else {
+                $skipped++;
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => "Fix complete",
+            'updated_records' => $updated,
+            'skipped_records' => $skipped,
+        ], 200);
+
+    } catch (\Exception $e) {
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+}
+
+
+public function sendDailyAttendanceReport(Request $request)
+{
+    Log::info('sendDailyAttendanceReport API HIT', [
+        'payload' => $request->all(),
+        'ip'      => $request->ip(),
+    ]);
+
+    $request->validate([
+        'date'     => 'required|date',
+        'email'    => 'required|email',
+        'password' => 'required|string',
+    ]);
+
+    if ($request->password !== 'ADMIN@EEMOT#2026') {
+        return response()->json([
+            'success' => false,
+            'message' => 'Unauthorized request',
+        ], 401);
+    }
+
+    try {
+        $date = Carbon::parse($request->date)->format('Y-m-d');
+
+        $users = User::whereNull('deleted_at')->get();
+
+        $rows = [];
+
+        // 🔢 Counters
+        $totalEmployees = $users->count();
+        $present = $absent = $half = $punchIn = $punchOut = 0;
+
+        foreach ($users as $user) {
+
+            $attendance = AttendanceDetail::where('user_id', $user->id)
+                ->where('date', $date)
+                ->first();
+
+            if ($attendance) {
+
+                $status = $attendance->status;
+
+                if ($status === 'present') $present++;
+                if ($status === 'half_time') $half++;
+
+                if ($attendance->punch_in_time) $punchIn++;
+                if ($attendance->punch_out_time) $punchOut++;
+
+                $rows[] = [
+                    'name'      => $user->name,
+                    'email'     => $user->email,
+                    'number'    => $user->number ?? '-',
+                    'status'    => $status,
+                    'punch_in'  => $attendance->punch_in_time
+                        ? Carbon::parse($attendance->punch_in_time)->format('H:i')
+                        : '-',
+                    'punch_out' => $attendance->punch_out_time
+                        ? Carbon::parse($attendance->punch_out_time)->format('H:i')
+                        : '-',
+                    'latitude'  => $attendance->punch_in_latitude ?? '-',
+                    'longitude' => $attendance->punch_in_longitude ?? '-',
+                    'location'  => $attendance->punch_in_location ?? '-',
+                ];
+            } else {
+                $absent++;
+
+                $rows[] = [
+                    'name'      => $user->name,
+                    'email'     => $user->email,
+                    'number'    => $user->number ?? '-',
+                    'status'    => 'absent',
+                    'punch_in'  => '-',
+                    'punch_out' => '-',
+                    'latitude'  => '-',
+                    'longitude' => '-',
+                    'location'  => '-',
+                ];
+            }
+        }
+
+        $summary = [
+            'total'     => $totalEmployees,
+            'present'   => $present,
+            'absent'    => $absent,
+            'half'      => $half,
+            'punch_in'  => $punchIn,
+            'punch_out' => $punchOut,
+        ];
+
+        Mail::to($request->email)->send(
+            new AdminDailyAttendanceMail($date, $rows, $summary)
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Daily attendance report sent successfully',
+        ]);
+
+    } catch (\Exception $e) {
+
+        Log::error('Daily attendance report failed', [
+            'error' => $e->getMessage(),
+        ]);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to send report',
+            'error'   => $e->getMessage(),
+        ], 500);
+    }
+}
+
+public function sendMonthlyAttendanceReport(Request $request)
+{
+    $request->validate([
+        'user_id'  => 'required|integer',
+        'month'    => 'required|integer|min:1|max:12',
+        'year'     => 'required|integer',
+        'email'    => 'required|email',
+        'password' => 'required|string',
+    ]);
+
+    if ($request->password !== 'ADMIN@EEMOT#2026') {
+        return response()->json(['message' => 'Unauthorized'], 401);
+    }
+
+    $user = User::findOrFail($request->user_id);
+
+    $month = $request->month;
+    $year  = $request->year;
+
+    $monthName = Carbon::create($year, $month)->format('F');
+
+    // 📅 Month start & end
+    $startDate = Carbon::create($year, $month, 1);
+    $endDate   = $startDate->copy()->endOfMonth();
+
+    // 📌 Fetch all attendance of user for that month (indexed by date)
+    $attendanceMap = AttendanceDetail::where('user_id', $user->id)
+        ->whereMonth('date', $month)
+        ->whereYear('date', $year)
+        ->get()
+        ->keyBy('date');
+
+    $rows = [];
+
+    // 🔁 LOOP THROUGH EVERY DAY OF MONTH
+    for ($date = $startDate->copy(); $date <= $endDate; $date->addDay()) {
+
+        $dateStr = $date->format('Y-m-d');
+
+        // 🟡 SUNDAY = WEEK OFF
+        if ($date->isSunday()) {
+
+            $rows[] = [
+                'date' => $date->format('d-m-Y'),
+                'status' => 'week_off',
+                'status_class' => 'half', // yellow shade
+                'punch_in' => '-',
+                'punch_out' => '-',
+                'latitude' => '-',
+                'longitude' => '-',
+                'location' => 'Sunday',
+            ];
+
+            continue;
+        }
+
+        // ✅ Attendance exists
+        if ($attendanceMap->has($dateStr)) {
+
+            $att = $attendanceMap[$dateStr];
+
+            $rows[] = [
+                'date' => $date->format('d-m-Y'),
+                'status' => $att->status,
+                'status_class' =>
+                    $att->status === 'present'
+                        ? 'present'
+                        : ($att->status === 'half_time' ? 'half' : 'absent'),
+                'punch_in' => $att->punch_in_time
+                    ? Carbon::parse($att->punch_in_time)->format('H:i')
+                    : '-',
+                'punch_out' => $att->punch_out_time
+                    ? Carbon::parse($att->punch_out_time)->format('H:i')
+                    : '-',
+                'latitude' => $att->punch_in_latitude ?? '-',
+                'longitude' => $att->punch_in_longitude ?? '-',
+                'location' => $att->punch_in_location ?? '-',
+            ];
+
+        } else {
+            // ❌ ABSENT
+            $rows[] = [
+                'date' => $date->format('d-m-Y'),
+                'status' => 'absent',
+                'status_class' => 'absent',
+                'punch_in' => '-',
+                'punch_out' => '-',
+                'latitude' => '-',
+                'longitude' => '-',
+                'location' => '-',
+            ];
+        }
+    }
+
+    // 📧 SEND MAIL + PDF
+    Mail::to($request->email)->send(
+        new UserMonthlyAttendanceMail($user, $rows, $monthName, $year)
+    );
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Monthly attendance report sent successfully',
+    ]);
+}
+
+
+
+public function downloadDailyAttendancePdf(Request $request)
+{
+    $request->validate([
+        'date' => 'required|date',
+        'password' => 'required|string',
+    ]);
+
+    if ($request->password !== 'ADMIN@EEMOT#2026') {
+        return response()->json(['message' => 'Unauthorized'], 401);
+    }
+
+    $date = Carbon::parse($request->date)->format('Y-m-d');
+
+    $users = User::whereNull('deleted_at')->get();
+
+    $rows = [];
+    $present = $absent = $half = $punchIn = $punchOut = 0;
+
+    foreach ($users as $user) {
+        $attendance = AttendanceDetail::where('user_id', $user->id)
+            ->where('date', $date)
+            ->first();
+
+        if ($attendance) {
+            if ($attendance->status === 'present') $present++;
+            if ($attendance->status === 'half_time') $half++;
+            if ($attendance->punch_in_time) $punchIn++;
+            if ($attendance->punch_out_time) $punchOut++;
+
+            $rows[] = [
+                'name' => $user->name,
+                'email' => $user->email,
+                'number' => $user->number ?? '-',
+                'status' => $attendance->status,
+                'punch_in' => $attendance->punch_in_time ? Carbon::parse($attendance->punch_in_time)->format('H:i') : '-',
+                'punch_out' => $attendance->punch_out_time ? Carbon::parse($attendance->punch_out_time)->format('H:i') : '-',
+                'latitude' => $attendance->punch_in_latitude ?? '-',
+                'longitude' => $attendance->punch_in_longitude ?? '-',
+                'location' => $attendance->punch_in_location ?? '-',
+            ];
+        } else {
+            $absent++;
+            $rows[] = [
+                'name' => $user->name,
+                'email' => $user->email,
+                'number' => $user->number ?? '-',
+                'status' => 'absent',
+                'punch_in' => '-',
+                'punch_out' => '-',
+                'latitude' => '-',
+                'longitude' => '-',
+                'location' => '-',
+            ];
+        }
+    }
+
+    $summary = [
+        'total' => $users->count(),
+        'present' => $present,
+        'absent' => $absent,
+        'half' => $half,
+        'punch_in' => $punchIn,
+        'punch_out' => $punchOut,
+    ];
+
+    $pdf = Pdf::loadView('pdfs.admin_daily_attendance', compact('date', 'rows', 'summary'))
+              ->setPaper('A4', 'landscape');
+
+    return $pdf->download("attendance-report-{$date}.pdf");
+}
+
+
+public function attendanceImages($userId)
+{
+    try {
+        $user = \App\Models\User::find($userId);
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User not found'
+            ], 404);
+        }
+
+        $images = [];
+
+        $records = \App\Models\AttendanceDetail::where('user_id', $userId)
+            ->orderBy('date', 'desc')
+            ->get();
+
+        foreach ($records as $row) {
+            $inImage  = $row->getMedia('punch_in_image')->first();
+            $outImage = $row->getMedia('punch_out_image')->first();
+
+            $images[] = [
+                'date'      => $row->date,
+                'punch_in'  => $row->punch_in_time,
+                'in_image'  => $inImage ? $inImage->getUrl() : null,
+                'punch_out' => $row->punch_out_time,
+                'out_image' => $outImage ? $outImage->getUrl() : null,
+            ];
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Attendance images fetched successfully',
+            'user' => [
+                'id'     => $user->id,
+                'name'   => $user->name,
+                'email'  => $user->email,
+                'number' => $user->number ?? '-',
+            ],
+            'data'    => $images,
+        ], 200);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Error fetching images',
+            'error'   => $e->getMessage()
+        ], 500);
+    }
+}
+
   
 
 

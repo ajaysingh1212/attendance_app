@@ -10,6 +10,7 @@ use App\Models\AddRequestAmount;
 use Gate;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
+use App\Models\User;
 
 class AddRequestAmountApiController extends Controller
 {
@@ -53,4 +54,47 @@ class AddRequestAmountApiController extends Controller
 
         return response(null, Response::HTTP_NO_CONTENT);
     }
+    
+    
+    public function submitRequestAmount(Request $request)
+    {
+        $request->validate([
+            'user_id'     => 'required|exists:users,id',
+            'amount'      => 'required|numeric|min:1',
+            'description' => 'nullable|string',
+        ]);
+    
+        $user = User::with('employee')->findOrFail($request->user_id);
+    
+        $addRequest = AddRequestAmount::create([
+            'user_id'     => $user->id,
+            'employee_id' => $user->employee ? $user->employee->id : null,
+            'amount'      => $request->amount,
+            'description' => $request->description,
+            'status'      => 'pending',
+        ]);
+    
+        return response()->json([
+            'message' => 'Request submitted successfully',
+            'data'    => $addRequest,
+        ], Response::HTTP_CREATED);
+    }
+    
+    
+    public function requestHistory($userId)
+    {
+        $requests = AddRequestAmount::where('user_id', $userId)
+            ->orderBy('created_at', 'desc')
+            ->get(['amount', 'description', 'status', 'remark', 'created_at']); // सिर्फ यही columns
+    
+        return response()->json([
+            'data' => $requests,
+        ], Response::HTTP_OK);
+    }
+
+
+    
+    
+    
+    
 }
