@@ -119,9 +119,13 @@ class UsersApiController extends Controller
     $token = $user->createToken('api-token')->plainTextToken;
 
     return response()->json([
-    'token' => $token,
-    'user'  => $user,
-]);
+        'token' => $token,
+        'user'  => array_merge(
+            $user->toArray(),
+            ['image' => $image] // 👈 overwrite image
+        ),
+        'roles' => $user->roles->pluck('title'),
+    ]);
 }
 
 
