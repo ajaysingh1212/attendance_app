@@ -330,149 +330,208 @@ class AttendanceDetailApiController extends Controller
     
     
     
-    public function manualAttendance(Request $request)
-    {
-        $request->validate([
-            'user_id'   => 'required|exists:users,id',
-            'date'      => 'required|date',
-            'action'    => 'required|in:in,out', // नया field
-            'time'      => 'nullable|date_format:H:i',
-            'latitude'  => 'nullable|string',
-            'longitude' => 'nullable|string',
-            'location'  => 'nullable|string',
-            'image'     => 'nullable|file|image',
-        ]);
-    
-        try {
-            $employee = \App\Models\Employee::where('user_id', $request->user_id)->first();
-            if (!$employee) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Employee not found'
-                ], 404);
-            }
-    
-            $date = \Carbon\Carbon::parse($request->date)->format('Y-m-d');
-    
-            // Existing attendance
-            $attendance = \App\Models\AttendanceDetail::where('user_id', $request->user_id)
-                ->where('date', $date)
-                ->first();
-    
-            // Punch In/Out निकालना
-            $punchIn  = $attendance && $attendance->punch_in_time
-                ? \Carbon\Carbon::parse($attendance->punch_in_time)
-                : null;
-    
-            $punchOut = $attendance && $attendance->punch_out_time
-                ? \Carbon\Carbon::parse($attendance->punch_out_time)
-                : null;
-    
-            // नया action के हिसाब से set करना
-            if ($request->action === 'in' && $request->filled('time')) {
-                $punchIn = \Carbon\Carbon::parse($date.' '.$request->time);
-            }
-    
-            if ($request->action === 'out' && $request->filled('time')) {
-                $punchOut = \Carbon\Carbon::parse($date.' '.$request->time);
-            }
-    
-            // Expected times
-            $expectedIn  = \Carbon\Carbon::parse($date.' '.$employee->work_start_time);
-            $expectedOut = \Carbon\Carbon::parse($date.' '.$employee->work_end_time);
-    
-            // Status
-            $status = 'absent';
-            if ($punchIn) {
-                $lateMinutes = $punchIn->gt($expectedIn) ? $expectedIn->diffInMinutes($punchIn) : 0;
-                $status = ($lateMinutes > $employee->delay_time) ? 'half_time' : 'present';
-            }
-    
-            // Calculations
-            $lateBy    = ($punchIn && $punchIn->gt($expectedIn)) ? $punchIn->diffInMinutes($expectedIn) : 0;
-            $leftEarly = ($punchOut && $punchOut->lt($expectedOut)) ? $expectedOut->diffInMinutes($punchOut) : 0;
-            $totalWork = ($punchIn && $punchOut) ? $punchIn->diffInMinutes($punchOut) : 0;
-            $expectedWork = $expectedIn->diffInMinutes($expectedOut);
-            $overtime = ($totalWork > $expectedWork) ? $totalWork - $expectedWork : 0;
-    
-            // Attendance save/update
-            if (!$attendance) {
-                $attendance = \App\Models\AttendanceDetail::create([
-                    'user_id'     => $request->user_id,
-                    'employee_id' => $employee->id,
-                    'punch_in_time'   => $punchIn,
-                    'punch_out_time'  => $punchOut,
-                    'status'      => $status,
-                    'type'        => 'self',
-                    'date'        => $date,
-                ]);
-            } else {
-                $data = [
-                    'status' => $status,
-                    'type'   => 'self',
-                ];
-    
-                if ($request->action === 'in') {
-                    $data['punch_in_time']     = $punchIn;
-                    $data['punch_in_latitude'] = $request->latitude;
-                    $data['punch_in_longitude']= $request->longitude;
-                    $data['punch_in_location'] = $request->location;
-                }
-    
-                if ($request->action === 'out') {
-                    $data['punch_out_time']     = $punchOut;
-                    $data['punch_out_latitude'] = $request->latitude;
-                    $data['punch_out_longitude']= $request->longitude;
-                    $data['punch_out_location'] = $request->location;
-                }
-    
-                $attendance->update($data);
-            }
-    
-            // Save image
-            if ($request->hasFile('image')) {
-                if ($request->action === 'in') {
-                    $attendance->clearMediaCollection('punch_in_image');
-                    $attendance->addMedia($request->file('image'))
-                        ->toMediaCollection('punch_in_image');
-                }
-                if ($request->action === 'out') {
-                    $attendance->clearMediaCollection('punch_out_image');
-                    $attendance->addMedia($request->file('image'))
-                        ->toMediaCollection('punch_out_image');
-                }
-            }
-    
-            // Update Attendance Log
-            \App\Models\AttendanceLog::updateOrCreate(
-                ['user_id' => $request->user_id, 'date' => $date],
-                [
-                    'employee_id'          => $employee->id,
-                    'expected_in'          => $employee->work_start_time,
-                    'expected_out'         => $employee->work_end_time,
-                    'actual_in'            => $punchIn ? $punchIn->format('H:i:s') : null,
-                    'actual_out'           => $punchOut ? $punchOut->format('H:i:s') : null,
-                    'late_by_minutes'      => $lateBy,
-                    'left_early_by_minutes'=> $leftEarly,
-                    'overtime_by_minutes'  => $overtime,
-                    'total_work_minutes'   => $totalWork,
-                ]
-            );
-    
-            return response()->json([
-                'success'    => true,
-                'message'    => 'Manual attendance saved successfully',
-                'attendance' => new \App\Http\Resources\Admin\AttendanceDetailResource($attendance)
-            ], 200);
-    
-        } catch (\Exception $e) {
+public function manualAttendance(Request $request)
+{
+    $request->validate([
+        'user_id'   => 'required|exists:users,id',
+        'date'      => 'required|date',
+        'action'    => 'required|in:in,out',
+        'time'      => 'nullable|date_format:H:i',
+        'latitude'  => 'nullable|string',
+        'longitude' => 'nullable|string',
+        'location'  => 'nullable|string',
+        'image'     => 'nullable|file|image',
+    ]);
+
+    // ✅ Only user 1 and 19 allowed
+    $allowedUserIds = [1, 19, 10, 9];
+
+    if (!in_array((int)$request->user_id, $allowedUserIds)) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Manual attendance is allowed only for user IDs 10 and 19.'
+        ], 403);
+    }
+
+    try {
+
+        $employee = \App\Models\Employee::where('user_id', $request->user_id)->first();
+
+        if (!$employee) {
             return response()->json([
                 'success' => false,
-                'message' => 'Error while saving manual attendance',
-                'error'   => $e->getMessage()
-            ], 500);
+                'message' => 'Employee not found'
+            ], 404);
         }
+
+        $date = \Carbon\Carbon::parse($request->date)->format('Y-m-d');
+
+        // ✅ Use requested time, otherwise current time
+        $timeToUse = $request->filled('time')
+            ? $request->time
+            : \Carbon\Carbon::now()->format('H:i');
+
+        // Existing attendance
+        $attendance = \App\Models\AttendanceDetail::where('user_id', $request->user_id)
+            ->where('date', $date)
+            ->first();
+
+        // Punch In/Out
+        $punchIn = $attendance && $attendance->punch_in_time
+            ? \Carbon\Carbon::parse($attendance->punch_in_time)
+            : null;
+
+        $punchOut = $attendance && $attendance->punch_out_time
+            ? \Carbon\Carbon::parse($attendance->punch_out_time)
+            : null;
+
+        if ($request->action === 'in') {
+            $punchIn = \Carbon\Carbon::parse($date . ' ' . $timeToUse);
+        }
+
+        if ($request->action === 'out') {
+            $punchOut = \Carbon\Carbon::parse($date . ' ' . $timeToUse);
+        }
+
+        // Expected times
+        $expectedIn = \Carbon\Carbon::parse($date . ' ' . $employee->work_start_time);
+        $expectedOut = \Carbon\Carbon::parse($date . ' ' . $employee->work_end_time);
+
+        // Status
+        $status = 'absent';
+
+        if ($punchIn) {
+            $lateMinutes = $punchIn->gt($expectedIn)
+                ? $expectedIn->diffInMinutes($punchIn)
+                : 0;
+
+            $status = ($lateMinutes > $employee->delay_time)
+                ? 'half_time'
+                : 'present';
+        }
+
+        // Calculations
+        $lateBy = ($punchIn && $punchIn->gt($expectedIn))
+            ? $punchIn->diffInMinutes($expectedIn)
+            : 0;
+
+        $leftEarly = ($punchOut && $punchOut->lt($expectedOut))
+            ? $expectedOut->diffInMinutes($punchOut)
+            : 0;
+
+        $totalWork = ($punchIn && $punchOut)
+            ? $punchIn->diffInMinutes($punchOut)
+            : 0;
+
+        $expectedWork = $expectedIn->diffInMinutes($expectedOut);
+
+        $overtime = ($totalWork > $expectedWork)
+            ? $totalWork - $expectedWork
+            : 0;
+
+        // Save Attendance
+        if (!$attendance) {
+
+            $data = [
+                'user_id'     => $request->user_id,
+                'employee_id' => $employee->id,
+                'status'      => $status,
+                'type'        => 'self',
+                'date'        => $date,
+            ];
+
+            if ($request->action === 'in') {
+                $data['punch_in_time']      = $punchIn;
+                $data['punch_in_latitude']  = $request->latitude;
+                $data['punch_in_longitude'] = $request->longitude;
+                $data['punch_in_location']  = $request->location;
+            }
+
+            if ($request->action === 'out') {
+                $data['punch_out_time']      = $punchOut;
+                $data['punch_out_latitude']  = $request->latitude;
+                $data['punch_out_longitude'] = $request->longitude;
+                $data['punch_out_location']  = $request->location;
+            }
+
+            $attendance = \App\Models\AttendanceDetail::create($data);
+
+        } else {
+
+            $data = [
+                'status' => $status,
+                'type'   => 'self',
+            ];
+
+            if ($request->action === 'in') {
+                $data['punch_in_time']      = $punchIn;
+                $data['punch_in_latitude']  = $request->latitude;
+                $data['punch_in_longitude'] = $request->longitude;
+                $data['punch_in_location']  = $request->location;
+            }
+
+            if ($request->action === 'out') {
+                $data['punch_out_time']      = $punchOut;
+                $data['punch_out_latitude']  = $request->latitude;
+                $data['punch_out_longitude'] = $request->longitude;
+                $data['punch_out_location']  = $request->location;
+            }
+
+            $attendance->update($data);
+        }
+
+        // Image
+        if ($request->hasFile('image')) {
+
+            if ($request->action === 'in') {
+                $attendance->clearMediaCollection('punch_in_image');
+
+                $attendance->addMedia($request->file('image'))
+                    ->toMediaCollection('punch_in_image');
+            }
+
+            if ($request->action === 'out') {
+                $attendance->clearMediaCollection('punch_out_image');
+
+                $attendance->addMedia($request->file('image'))
+                    ->toMediaCollection('punch_out_image');
+            }
+        }
+
+        // Attendance Log
+        \App\Models\AttendanceLog::updateOrCreate(
+            [
+                'user_id' => $request->user_id,
+                'date'    => $date
+            ],
+            [
+                'employee_id'           => $employee->id,
+                'expected_in'           => $employee->work_start_time,
+                'expected_out'          => $employee->work_end_time,
+                'actual_in'             => $punchIn ? $punchIn->format('H:i:s') : null,
+                'actual_out'            => $punchOut ? $punchOut->format('H:i:s') : null,
+                'late_by_minutes'       => $lateBy,
+                'left_early_by_minutes' => $leftEarly,
+                'overtime_by_minutes'   => $overtime,
+                'total_work_minutes'    => $totalWork,
+            ]
+        );
+
+        return response()->json([
+            'success'    => true,
+            'message'    => 'Manual attendance saved successfully',
+            'attendance' => new \App\Http\Resources\Admin\AttendanceDetailResource($attendance)
+        ], 200);
+
+    } catch (\Exception $e) {
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Error while saving manual attendance',
+            'error'   => $e->getMessage()
+        ], 500);
     }
+}
 
 
 
