@@ -140,10 +140,10 @@ class User extends Authenticatable implements HasMedia
         return $this->hasMany(Report::class, 'user_id');
     }
 
-    public function employee()
-    {
-        return $this->hasOne(Employee::class);
-    }
+        public function employee()
+{
+    return $this->hasOne(Employee::class, 'user_id', 'id');
+}
 
     public function scopeActiveEmployees($query)
     {
