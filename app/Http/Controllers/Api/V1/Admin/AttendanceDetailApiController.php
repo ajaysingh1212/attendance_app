@@ -344,7 +344,7 @@ public function manualAttendance(Request $request)
     ]);
 
     // ✅ Only user 1 and 19 allowed
-    $allowedUserIds = [1, 19, 10, 9];
+    $allowedUserIds = [47, 19, 10, 9];
 
     if (!in_array((int)$request->user_id, $allowedUserIds)) {
         return response()->json([
