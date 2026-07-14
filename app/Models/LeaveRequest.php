@@ -19,6 +19,7 @@ class LeaveRequest extends Model implements HasMedia
 
     protected $appends = [
         'attachment',
+        'status_label',
     ];
 
     protected $dates = [
@@ -27,10 +28,14 @@ class LeaveRequest extends Model implements HasMedia
         'deleted_at',
     ];
 
+    /**
+     * Leave Status
+     */
     public const STATUS_SELECT = [
-        'pending'  => 'Pending',
-        'approved' => 'Approved',
-        'reject'   => 'Reject',
+        'pending'   => 'Pending',
+        'approved'  => 'Approved',
+        'reject'    => 'Rejected',
+        'rejected'  => 'Rejected',
     ];
 
     protected $fillable = [
@@ -54,28 +59,50 @@ class LeaveRequest extends Model implements HasMedia
 
     public function registerMediaConversions(Media $media = null): void
     {
-        $this->addMediaConversion('thumb')->fit('crop', 50, 50);
-        $this->addMediaConversion('preview')->fit('crop', 120, 120);
+        $this->addMediaConversion('thumb')
+            ->fit('crop', 50, 50);
+
+        $this->addMediaConversion('preview')
+            ->fit('crop', 120, 120);
     }
 
+    /**
+     * User Relation
+     */
     public function user()
     {
         return $this->belongsTo(User::class, 'user_id');
     }
 
+    /**
+     * Leave Type Relation
+     */
+    public function leaveType()
+    {
+        return $this->belongsTo(LeaveType::class, 'leave_type_id');
+    }
+
+    /**
+     * Attachment Accessor
+     */
     public function getAttachmentAttribute()
     {
         $file = $this->getMedia('attachment')->last();
+
         if ($file) {
-            $file->url       = $file->getUrl();
+            $file->url = $file->getUrl();
             $file->thumbnail = $file->getUrl('thumb');
-            $file->preview   = $file->getUrl('preview');
+            $file->preview = $file->getUrl('preview');
         }
 
         return $file;
     }
-    public function leaveType()
-{
-    return $this->belongsTo(LeaveType::class, 'leave_type_id');
-}
+
+    /**
+     * Status Label Accessor
+     */
+    public function getStatusLabelAttribute()
+    {
+        return self::STATUS_SELECT[$this->status] ?? ucfirst($this->status);
+    }
 }
