@@ -137,15 +137,47 @@
     text-align:center;
     padding: 40px 0;
 }
+
+.attendance-page {
+    margin-top: -32px;
+    padding-top: 6px !important;
+}
+.attendance-page .attendance-title {
+    margin-bottom: 16px !important;
+}
+.attendance-page .attendance-actions {
+    margin-bottom: 14px !important;
+}
+.attendance-page .attendance-filter {
+    margin-bottom: 16px !important;
+}
+.attendance-page .calendar-wrapper {
+    padding: 14px;
+}
+.attendance-page .salary-panel-header,
+.attendance-page .salary-panel-body {
+    padding: 14px 16px;
+}
+.attendance-page #attendanceSummary {
+    gap: 10px;
+    margin-bottom: 1rem;
+}
+.attendance-page .summary-box {
+    min-width: 112px;
+    padding: 12px 16px;
+}
+.attendance-page .summary-box .counter {
+    font-size: 23px;
+}
 </style>
 @endsection
 
 @section('content')
-<div class="container-fluid py-4">
-    <h2 class="mb-4 text-center fw-bold">📅 Attendance Calendar</h2>
+<div class="container-fluid py-2 attendance-page">
+    {{-- <h2 class="attendance-title text-center fw-bold">📅 Attendance Calendar</h2> --}}
 
     {{-- Action buttons --}}
-    <div class="mb-3 d-flex gap-2">
+    {{-- <div class="attendance-actions d-flex gap-2">
         <a class="btn btn-success" href="{{ route('admin.attendance-details.create') }}">
             {{ trans('global.add') }} {{ trans('cruds.attendanceDetail.title_singular') }}
         </a>
@@ -153,11 +185,11 @@
             {{ trans('global.app_csvImport') }}
         </button>
         @include('csvImport.modal', ['model'=>'AttendanceDetail','route'=>'admin.attendance-details.parseCsvImport'])
-    </div>
+    </div> --}}
 
     {{-- Employee filter (admin only) --}}
     @if(auth()->user()->is_admin)
-    <div class="mb-3 text-center">
+    <div class="attendance-filter text-center">
         <select class="form-control d-inline-block" style="max-width:320px;" id="userSelect">
             <option value="">🔽 Select Employee</option>
             @foreach($users as $user)

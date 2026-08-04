@@ -8,6 +8,8 @@ use App\Models\LeaveRequest;
 use App\Models\EmployeeStatusLog;
 use App\Models\GroupTask;
 use App\Models\TaskGroup;
+use App\Models\AuditLog;
+use App\Models\Role;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -407,6 +409,9 @@ class HomeController
                 ->count(),
         ];
 
+        $auditLogRoles = Role::orderBy('title')->pluck('title', 'title');
+        $auditLogModules = AuditLog::moduleLabels();
+
         /* ══════════════════════════════════════════════
            RETURN VIEW
         ══════════════════════════════════════════════ */
@@ -449,7 +454,11 @@ class HomeController
 
             'taskSummary',
 
-            'taskDashboardGroups'
+            'taskDashboardGroups',
+
+            'auditLogRoles',
+
+            'auditLogModules'
         ));
     }
 

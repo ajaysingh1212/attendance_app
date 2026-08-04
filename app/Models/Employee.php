@@ -2,26 +2,27 @@
 
 namespace App\Models;
 
+use App\Traits\Auditable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class Employee extends Model
 {
-    use HasFactory;
+    use Auditable, HasFactory;
 
     protected $fillable = [
         'user_id', 'employee_code', 'full_name', 'email', 'phone',
-        'bank_name', 'account_number', 'ifsc_code', 'pan_number', 'aadhaar_number', 'payment_mode',
+        'bank_name', 'bank_address', 'account_number', 'ifsc_code', 'pan_number', 'aadhaar_number', 'payment_mode',
         'work_start_time', 'work_end_time', 'working_hours', 'weekly_off_day',
         'attendance_source', 'attendance_radius_meter',
         'basic_salary', 'hra', 'other_allowances', 'deductions', 'net_salary',
-        'date_of_joining', 'position', 'department', 'reporting_to', 'status',
+        'date_of_joining', 'position', 'department', 'reporting_to', 'status', 'status_change_pending',
         'profile_photo', 'other_allowances_json','branch_id','delay_time','blood_group',
 
         // Document Fields
         'cv', 'offer_letter', 'aadhaar_front', 'aadhaar_back',
         'pan_card', 'marksheet', 'certificate', 'passbook',
-        'photo', 'other_document','signature','exprience_letter','document_verified','company_id','employee_type','employee_duration_months','date_of_birth','anniversary_date','special_terms'
+        'photo', 'other_document','signature','experience_letter','document_verified','company_id','employee_type','employee_duration_months','date_of_birth','anniversary_date','special_terms'
     ];
 
      protected $casts = [

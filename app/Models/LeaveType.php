@@ -4,10 +4,13 @@
 
 namespace App\Models;
 
+use App\Traits\Auditable;
 use Illuminate\Database\Eloquent\Model;
 
 class LeaveType extends Model
 {
+    use Auditable;
+
     protected $fillable = ['name', 'description'];
 
     /** Only the explicitly named "Paid Leave" type is salary-paid. */
