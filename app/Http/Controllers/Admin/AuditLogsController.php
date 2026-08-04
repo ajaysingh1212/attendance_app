@@ -119,6 +119,7 @@ class AuditLogsController extends Controller
 
         return AuditLog::query()
             ->with('user')
+            ->whereNotNull('user_id')
             ->whereDate('created_at', '>=', $from)
             ->whereDate('created_at', '<=', $to)
             ->when($request->filled('role'), function ($query) use ($request) {

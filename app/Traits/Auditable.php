@@ -31,6 +31,10 @@ trait Auditable
             return;
         }
 
+        if (!auth()->check()) {
+            return;
+        }
+
         $actor = auth()->user();
         $targetUser = self::targetUserForAudit($model);
         $action = Str::after($description, 'audit:');
