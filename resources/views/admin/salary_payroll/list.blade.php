@@ -83,7 +83,7 @@
                 </tr>
             </thead>
             <tbody>
-                @forelse($payrolls as $payroll)
+                @foreach($payrolls as $payroll)
                     <tr>
                         <td>{{ $loop->iteration }}</td>
                         <td>
@@ -149,11 +149,7 @@
                             </button>
                         </td>
                     </tr>
-                @empty
-                    <tr>
-                        <td colspan="25" class="text-center text-muted">No payroll data found for this month.</td>
-                    </tr>
-                @endforelse
+                @endforeach
             </tbody>
         </table>
 
@@ -261,6 +257,9 @@ $(document).ready(function() {
         pageLength: 10,
         lengthMenu: [5, 10, 25, 50, 100, 200],
         responsive: true,
+        language: {
+            emptyTable: 'No payroll data found for this month.'
+        },
         dom: '<"d-flex justify-content-between align-items-center mb-2"Bf>rt<"d-flex justify-content-between mt-3"lip>',
         buttons: [
             { extend: 'colvis', text: '<i class="fas fa-eye"></i> Show/Hide Columns', className: 'btn btn-sm btn-outline-primary' },
