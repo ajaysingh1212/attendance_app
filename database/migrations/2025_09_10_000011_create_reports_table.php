@@ -4,7 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-class CreatePerformanceReportsTable  extends Migration
+return new class extends Migration
 {
     public function up()
     {
@@ -22,4 +22,9 @@ class CreatePerformanceReportsTable  extends Migration
             $table->softDeletes();
         });
     }
-}
+
+    public function down()
+    {
+        Schema::dropIfExists('performance_reports');
+    }
+};

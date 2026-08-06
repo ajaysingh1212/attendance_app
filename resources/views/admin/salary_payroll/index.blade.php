@@ -12,12 +12,27 @@
     <div class="card-body">
 
         {{-- Alerts --}}
+        @if(session('success'))
+            <div class="alert alert-success">{{ session('success') }}</div>
+        @endif
+
         @if(session('warning'))
             <div class="alert alert-warning">{{ session('warning') }}</div>
         @endif
 
         @if(session('error'))
             <div class="alert alert-danger">{{ session('error') }}</div>
+        @endif
+
+        @if($errors->any())
+            <div class="alert alert-danger">
+                <strong>Please fix the following error:</strong>
+                <ul class="mb-0 mt-2">
+                    @foreach($errors->all() as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+                </ul>
+            </div>
         @endif
 
         {{-- Month / Year Check --}}
@@ -61,6 +76,16 @@
                 data-target="#masterPasswordModal">
                 Regenerate Payroll 🔐
             </button>
+        @else
+            <form method="POST" action="{{ route('admin.payroll.generate') }}" class="mt-3">
+                @csrf
+                <input type="hidden" name="month" value="{{ $month }}">
+                <input type="hidden" name="year" value="{{ $year }}">
+
+                <button type="submit" class="btn btn-success">
+                    Generate Payroll
+                </button>
+            </form>
         @endif
 
     </div>

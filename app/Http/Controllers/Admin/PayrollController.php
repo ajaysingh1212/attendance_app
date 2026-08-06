@@ -22,6 +22,7 @@ use Carbon\CarbonPeriod;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
+use Throwable;
 
 
 class PayrollController extends Controller
@@ -76,8 +77,18 @@ public function generate(Request $request)
         'year'  => 'required|integer|min:2000|max:2100',
     ]);
 
-    $month = $request->month;
-    $year  = $request->year;
+    try {
+    $month = (int) $request->month;
+    $year  = (int) $request->year;
+
+    if (
+        !$request->boolean('force') &&
+        Payroll::where('month', $month)->where('year', $year)->exists()
+    ) {
+        return redirect()
+            ->route('admin.payroll.index', ['month' => $month, 'year' => $year])
+            ->with('error', 'Payroll already generated for this month. Please use Regenerate Payroll.');
+    }
 
     Payroll::where('month', $month)
         ->where('year', $year)
@@ -378,8 +389,15 @@ public function generate(Request $request)
     }
 
     return redirect()
-        ->route('admin.payroll.index')
+        ->route('admin.payroll.index', ['month' => $month, 'year' => $year])
         ->with('success', '🔥 PERFECT: Increment + Leave + Salary all fixed');
+    } catch (Throwable $e) {
+        report($e);
+
+        return back()
+            ->withInput()
+            ->with('error', 'Payroll generate nahi hua: ' . $e->getMessage());
+    }
 }
 
 
