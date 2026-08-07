@@ -156,6 +156,8 @@ Route::group(['prefix' => 'v1', 'as' => 'api.', 'namespace' => 'Api\V1\Admin'], 
     // 💰 Salary Details by User + Month + Year
     Route::get('salary/{userId}/{month}/{year}','PayrollApiController@getSalaryDetails')->name('salary.details');
 
+    Route::get('salary-slip/{userId}/{month}/{year}','PayrollApiController@downloadSalarySlip')->name('salary-slip.download');
+
 
 
 

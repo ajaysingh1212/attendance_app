@@ -7,6 +7,8 @@ use App\Models\Employee;
 use App\Models\Payroll;
 use Illuminate\Http\Request;
 
+use Barryvdh\DomPDF\Facade\Pdf;
+
 class PayrollApiController extends Controller
 {
     public function getSalaryDetails($userId, $month, $year)
@@ -91,4 +93,40 @@ class PayrollApiController extends Controller
             ]
         ]);
     }
+
+    public function downloadSalarySlip($userId, $month, $year)
+    {
+        $employee = Employee::where('user_id', $userId)->first();
+
+        if (!$employee) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Employee not found'
+            ], 404);
+        }
+
+        $payroll = Payroll::with('partPayments')
+            ->where('employee_id', $employee->id)
+            ->where('month', $month)
+            ->where('year', $year)
+            ->first();
+
+        if (!$payroll) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Salary not found'
+            ], 404);
+        }
+
+        $pdf = Pdf::loadView('payroll.payslip', [
+            'employee' => $employee,
+            'payroll'  => $payroll,
+        ]);
+
+        return $pdf->download(
+            'Payslip_'.$employee->employee_id.'_'.$month.'_'.$year.'.pdf'
+        );
+    }
+
+
 }
