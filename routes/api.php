@@ -158,6 +158,7 @@ Route::group(['prefix' => 'v1', 'as' => 'api.', 'namespace' => 'Api\V1\Admin'], 
 
     Route::get('salary-slip/{userId}/{month}/{year}','PayrollApiController@downloadSalarySlip')->name('salary-slip.download');
 
+    Route::get('policy/download', 'DocumentApiController@downloadPolicy')->name('policy.download');
 
 
 
