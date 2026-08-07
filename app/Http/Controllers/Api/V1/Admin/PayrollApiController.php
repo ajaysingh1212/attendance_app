@@ -121,7 +121,7 @@ class PayrollApiController extends Controller
         $pdf = Pdf::loadView('payroll.payslip', [
             'employee' => $employee,
             'payroll'  => $payroll,
-        ]);
+        ])->setPaper('a4', 'portrait');
 
         return $pdf->download(
             'Payslip_'.$employee->employee_id.'_'.$month.'_'.$year.'.pdf'
