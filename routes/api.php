@@ -151,8 +151,10 @@ Route::group(['prefix' => 'v1', 'as' => 'api.', 'namespace' => 'Api\V1\Admin'], 
     // 🧾 Send User Montly Attendance Report
     Route::post('attendance/send-monthly-report','AttendanceDetailApiController@sendMonthlyAttendanceReport')->name('attendance.send-monthly-report');
     
-    Route::get('attendance/images/{userId}', 'AttendanceDetailApiController@attendanceImages')
-     ->name('attendance.images');
+    Route::get('attendance/images/{userId}', 'AttendanceDetailApiController@attendanceImages')->name('attendance.images');
+
+    // 💰 Salary Details by User + Month + Year
+    Route::get('salary/{userId}/{month}/{year}','PayrollApiController@getSalaryDetails')->name('salary.details');
 
 
 
