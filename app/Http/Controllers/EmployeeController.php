@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\Response;
 use PDF;
 use Illuminate\Support\Facades\File;
+use Illuminate\Validation\Rule;
 
 class EmployeeController extends Controller
 {
@@ -98,6 +99,7 @@ class EmployeeController extends Controller
             'weekly_off_day'             => 'nullable|string|max:20',
             'attendance_source'          => 'nullable|string|max:20',
             'attendance_radius_meter'    => 'nullable|numeric',
+            'delay_time'                 => 'nullable|numeric',
             'basic_salary'               => 'nullable|numeric',
             'hra'                        => 'nullable|numeric',
             'deductions'                 => 'nullable|numeric',
@@ -188,6 +190,10 @@ class EmployeeController extends Controller
 
         $validated = $request->validate([
             'user_id'                  => 'required|exists:users,id',
+            'employee_code'            => [
+                'required',
+                Rule::unique('employees', 'employee_code')->ignore($employee->id),
+            ],
             'full_name'                => 'required|string|max:255',
             'email'                    => 'nullable|email',
             'phone'                    => 'nullable|string|max:20',
@@ -197,6 +203,19 @@ class EmployeeController extends Controller
             'date_of_birth'            => 'nullable|date',
             'anniversary_date'         => 'nullable|date',
             'special_terms'            => 'nullable|string',
+            'ifsc_code'                => 'nullable|string|max:20',
+            'bank_name'                => 'nullable|string|max:100',
+            'bank_address'             => 'nullable|string|max:255',
+            'account_number'           => 'nullable|string|max:50',
+            'pan_number'               => 'nullable|string|max:20',
+            'aadhaar_number'           => 'nullable|string|max:20',
+            'payment_mode'             => 'nullable|string|max:20',
+            'work_start_time'          => 'nullable',
+            'work_end_time'            => 'nullable',
+            'working_hours'            => 'nullable|string|max:10',
+            'weekly_off_day'           => 'nullable|string|max:20',
+            'attendance_radius_meter'  => 'nullable|numeric',
+            'delay_time'               => 'nullable|numeric',
             'basic_salary'             => 'nullable|numeric',
             'hra'                      => 'nullable|numeric',
             'deductions'               => 'nullable|numeric',
@@ -207,6 +226,7 @@ class EmployeeController extends Controller
             'department'               => 'nullable|string|max:100',
             'reporting_to'             => 'nullable|exists:users,id',
             'status'                   => 'nullable|string|max:50',
+            'document_verified'        => 'nullable|string|in:pending,processing,verified,rejected',
             'profile_photo'            => 'nullable|file|max:5120',
             'cv'                       => 'nullable|file|max:5120',
             'offer_letter'             => 'nullable|file|max:5120',

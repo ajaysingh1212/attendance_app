@@ -89,6 +89,12 @@
             <span class="dash-date">{{ \Carbon\Carbon::today()->format('l, d M Y') }}</span>
         </div>
         <div class="topbar-right">
+            @can('audit_log_access')
+            <button type="button" class="btn-audit-trigger" onclick="openAuditLogModal()">
+                <i class="fas fa-history"></i>
+                Activity Logs
+            </button>
+            @endcan
             {{-- Inactive employees trigger --}}
             @php $inactiveCount = $inactiveEmployees->count() ?? 0; @endphp
             @if($inactiveCount > 0)
@@ -274,6 +280,50 @@
 
 </div>{{-- end .hrdash --}}
 @endif
+
+@can('audit_log_access')
+<div class="modal fade" id="auditLogModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content audit-modal">
+            <div class="audit-modal-head">
+                <div>
+                    <h5>Activity Audit Logs</h5>
+                    <p>User, role, menu, action and exact changed record in one place.</p>
+                </div>
+                <button type="button" class="audit-close" data-bs-dismiss="modal">x</button>
+            </div>
+            <div class="audit-filter-bar">
+                <input type="date" id="auditFrom" class="audit-input" value="{{ now()->toDateString() }}">
+                <input type="date" id="auditTo" class="audit-input" value="{{ now()->toDateString() }}">
+                <select id="auditRole" class="audit-input">
+                    <option value="">All Roles</option>
+                    @foreach($auditLogRoles ?? [] as $role)
+                        <option value="{{ $role }}">{{ $role }}</option>
+                    @endforeach
+                </select>
+                <select id="auditModule" class="audit-input">
+                    <option value="">All Menus</option>
+                    @foreach($auditLogModules ?? [] as $module)
+                        <option value="{{ $module }}">{{ $module }}</option>
+                    @endforeach
+                </select>
+                <select id="auditAction" class="audit-input">
+                    <option value="">All Actions</option>
+                    <option value="created">Created</option>
+                    <option value="updated">Updated</option>
+                    <option value="deleted">Deleted</option>
+                </select>
+                <input type="search" id="auditSearch" class="audit-input audit-search" placeholder="Search user, menu, record...">
+                <button type="button" class="audit-apply" onclick="loadAuditLogs()">Apply</button>
+                <button type="button" class="audit-reset" onclick="resetAuditFilters()">Reset</button>
+            </div>
+            <div id="auditLogList" class="audit-log-list">
+                <div class="audit-empty">Open filters and click Apply to load logs.</div>
+            </div>
+        </div>
+    </div>
+</div>
+@endcan
 
 {{-- ════════════════════════════════════════════════════════
      REACTIVATE CONFIRMATION MODAL
@@ -590,6 +640,124 @@
     cursor: pointer;
 }
 
+.btn-audit-trigger {
+    border: 1px solid #bfd0e8;
+    background: #0f766e;
+    color: #fff;
+    border-radius: 8px;
+    padding: 9px 14px;
+    font-size: .84rem;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 8px 18px rgba(15,118,110,.18);
+}
+.audit-modal {
+    border: 0;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 24px 70px rgba(15,23,42,.22);
+}
+.audit-modal-head {
+    background: #102a43;
+    color: #fff;
+    padding: 20px 22px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+}
+.audit-modal-head h5 { margin: 0; font-weight: 800; letter-spacing: 0; }
+.audit-modal-head p { margin: 4px 0 0; color: #bcccdc; font-size: .84rem; }
+.audit-close {
+    width: 34px;
+    height: 34px;
+    border: 0;
+    border-radius: 8px;
+    background: rgba(255,255,255,.12);
+    color: #fff;
+}
+.audit-filter-bar {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(120px, 1fr)) minmax(190px, 1.4fr) auto auto;
+    gap: 10px;
+    padding: 14px;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+}
+.audit-input {
+    height: 38px;
+    border: 1px solid #d8e2ef;
+    border-radius: 8px;
+    padding: 0 10px;
+    font-size: .82rem;
+    background: #fff;
+    color: #1e293b;
+}
+.audit-apply, .audit-reset {
+    border: 0;
+    border-radius: 8px;
+    padding: 0 14px;
+    font-weight: 800;
+    height: 38px;
+}
+.audit-apply { background: #2563eb; color: #fff; }
+.audit-reset { background: #e2e8f0; color: #334155; }
+.audit-log-list {
+    max-height: 62vh;
+    overflow: auto;
+    padding: 14px;
+    background: #fff;
+}
+.audit-item {
+    display: grid;
+    grid-template-columns: 44px 1fr auto;
+    gap: 12px;
+    padding: 13px;
+    border: 1px solid #e6edf5;
+    border-radius: 8px;
+    margin-bottom: 10px;
+}
+.audit-action-mark {
+    width: 44px;
+    height: 44px;
+    border-radius: 8px;
+    display: grid;
+    place-items: center;
+    background: #e0f2fe;
+    color: #075985;
+}
+.audit-title {
+    font-weight: 800;
+    color: #172b4d;
+    margin-bottom: 5px;
+}
+.audit-meta {
+    color: #64748b;
+    font-size: .78rem;
+    line-height: 1.7;
+}
+.audit-chip {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: #eef2ff;
+    color: #3730a3;
+    font-weight: 700;
+    margin-right: 5px;
+}
+.audit-time {
+    white-space: nowrap;
+    color: #475569;
+    font-size: .78rem;
+    font-weight: 700;
+}
+.audit-empty {
+    text-align: center;
+    padding: 44px 16px;
+    color: #64748b;
+}
+
 /* ── Attendance Grid ── */
 .attendance-grid {
     display: grid;
@@ -864,6 +1032,9 @@
     .home-task-metrics { grid-template-columns: 1fr 1fr; }
     .stats-row { grid-template-columns: 1fr 1fr; }
     .attendance-grid { grid-template-columns: 1fr; }
+    .audit-filter-bar { grid-template-columns: 1fr; }
+    .audit-item { grid-template-columns: 38px 1fr; }
+    .audit-time { grid-column: 2; }
 }
 </style>
 
@@ -892,6 +1063,69 @@ function filterCards(status) {
 function toggleCustom(val) {
     document.getElementById('customRange').style.display = val === 'custom' ? 'flex' : 'none';
 }
+
+@can('audit_log_access')
+function openAuditLogModal() {
+    const modal = new bootstrap.Modal(document.getElementById('auditLogModal'));
+    modal.show();
+    loadAuditLogs();
+}
+
+function loadAuditLogs() {
+    const params = new URLSearchParams({
+        from: document.getElementById('auditFrom').value,
+        to: document.getElementById('auditTo').value,
+        role: document.getElementById('auditRole').value,
+        module: document.getElementById('auditModule').value,
+        action: document.getElementById('auditAction').value,
+        q: document.getElementById('auditSearch').value
+    });
+    const list = document.getElementById('auditLogList');
+    list.innerHTML = '<div class="audit-empty">Loading activity...</div>';
+
+    fetch(`{{ route('admin.audit-logs.feed') }}?${params.toString()}`)
+        .then(r => r.json())
+        .then(logs => {
+            if (!logs.length) {
+                list.innerHTML = '<div class="audit-empty">No audit logs found for selected filters.</div>';
+                return;
+            }
+
+            list.innerHTML = logs.map(log => `
+                <div class="audit-item">
+                    <div class="audit-action-mark"><i class="fas fa-history"></i></div>
+                    <div>
+                        <div class="audit-title">${escapeHtml(log.sentence)}</div>
+                        <div class="audit-meta">
+                            <span class="audit-chip">${escapeHtml(log.module)}</span>
+                            Date: <strong>${escapeHtml(log.date)}</strong>
+                            Time: <strong>${escapeHtml(log.time)}</strong>
+                        </div>
+                    </div>
+                    <div class="audit-time">${escapeHtml(log.created_at)}</div>
+                </div>
+            `).join('');
+        })
+        .catch(() => {
+            list.innerHTML = '<div class="audit-empty text-danger">Unable to load audit logs.</div>';
+        });
+}
+
+function resetAuditFilters() {
+    ['auditRole', 'auditModule', 'auditAction', 'auditSearch'].forEach(id => {
+        document.getElementById(id).value = '';
+    });
+    document.getElementById('auditFrom').value = '{{ now()->toDateString() }}';
+    document.getElementById('auditTo').value = '{{ now()->toDateString() }}';
+    loadAuditLogs();
+}
+
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, function (char) {
+        return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[char]);
+    });
+}
+@endcan
 
 /* ══ INACTIVE DRAWER ══════════════════════════════════ */
 let drawerLoaded = false;

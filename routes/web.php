@@ -52,6 +52,7 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.', 'namespace' => 'Admin', 'mi
 
     // Audit Logs
     Route::resource('audit-logs', 'AuditLogsController', ['except' => ['create', 'store', 'edit', 'update', 'destroy']]);
+    Route::get('audit-logs-feed', 'AuditLogsController@feed')->name('audit-logs.feed');
 
     // Company
     Route::delete('companies/destroy', 'CompanyController@massDestroy')->name('companies.massDestroy');

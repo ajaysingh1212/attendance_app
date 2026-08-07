@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\Auditable;
 use App\Traits\MultiTenantModelTrait;
 use Carbon\Carbon;
 use DateTimeInterface;
@@ -11,7 +12,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class ShowReport extends Model
 {
-    use SoftDeletes, MultiTenantModelTrait, HasFactory;
+    use SoftDeletes, MultiTenantModelTrait, Auditable, HasFactory;
 
     public $table = 'show_reports';
 

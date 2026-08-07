@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Traits\Auditable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class ExperienceLetter extends Model
 {
+    use Auditable;
+
     protected $fillable = [
         'employee_id',
         'date_of_joining',
