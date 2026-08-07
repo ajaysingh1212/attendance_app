@@ -582,9 +582,24 @@
     </tr>
 </table>
 
+@php
+    $amountInWords = null;
+
+    if (class_exists('NumberFormatter')) {
+        try {
+            $formatter = new NumberFormatter('en', NumberFormatter::SPELLOUT);
+            $amountInWords = ucwords($formatter->format((int) round($payroll->net_salary)));
+        } catch (\Throwable $e) {
+            $amountInWords = null;
+        }
+    }
+@endphp
+
+@if($amountInWords)
 <div class="amount-words">
-    Amount In Words : <strong>Indian Rupee {{ ucwords(\App\Helpers\NumberToWords::convert($payroll->net_salary) ?? '') }} Only</strong>
+    Amount In Words : <strong>Indian Rupee {{ $amountInWords }} Only</strong>
 </div>
+@endif
 
 <!-- Attendance summary -->
 
