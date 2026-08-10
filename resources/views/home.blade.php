@@ -135,6 +135,17 @@
                 @endforeach
             </select>
         </div>
+        <div class="filter-group">
+            <label>Office</label>
+            <select name="office_branch_id" class="filter-select">
+                <option value="">All Offices</option>
+                @foreach($officeBranches ?? [] as $office)
+                    <option value="{{ $office->id }}" {{ (string)($officeFilter ?? '') === (string)$office->id ? 'selected' : '' }}>
+                        {{ $office->branch_name }}
+                    </option>
+                @endforeach
+            </select>
+        </div>
         <button type="submit" class="btn-apply">
             <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z"/></svg>
             Apply Filter
@@ -223,7 +234,12 @@
                 <div class="att-avatar">{{ strtoupper(substr($att->user->full_name ?? 'E', 0, 2)) }}</div>
                 <div class="att-name-block">
                     <span class="att-name">{{ $att->user->full_name ?? $att->user->name ?? 'N/A' }}</span>
-                    <span class="att-dept">{{ $att->user->department ?? $att->user->position ?? '' }}</span>
+                    <span class="att-dept">
+                        {{ $att->user->officeBranch->branch_name ?? 'No Office' }}
+                        @if($att->user->department || $att->user->position)
+                            · {{ $att->user->department ?? $att->user->position }}
+                        @endif
+                    </span>
                 </div>
                 <span class="att-badge">{{ $statusLabel }}</span>
             </div>

@@ -57,6 +57,7 @@
                 <tr>
                     <th>#</th>
                     <th>Employee</th>
+                    <th>Office</th>
                     <th>Present</th>
                     <th>Half Days</th>
                     <th>Paid Leaves</th>
@@ -90,6 +91,7 @@
                             <strong>{{ $payroll->employee->full_name ?? '-' }}</strong><br>
                             <small class="text-muted">({{ $payroll->employee->employee_code ?? '-' }})</small>
                         </td>
+                        <td>{{ $payroll->officeBranch->branch_name ?? $payroll->employee->officeBranch->branch_name ?? 'Not Assigned' }}</td>
                         <td>{{ $payroll->present_days }}</td>
                         <td>{{ $payroll->half_days ?? '0' }}</td>
                         <td>{{ $payroll->paid_leaves ?? '0' }}</td>

@@ -143,6 +143,7 @@
                         <th>Code</th>
                         <th>Contact</th>
                         <th>Branch</th>
+                        <th>Office</th>
                         <th>Role</th>
                         <th>Status</th>
                         @if($isAdmin)<th>Actions</th>@endif
@@ -181,6 +182,12 @@
                     <td>
                         <div class="emp-branch">
                             {{ $employee->branch->title ?? 'Anywhere' }}
+                        </div>
+                    </td>
+
+                    <td>
+                        <div class="emp-branch">
+                            {{ $employee->officeBranch->branch_name ?? 'Not Assigned' }}
                         </div>
                     </td>
 

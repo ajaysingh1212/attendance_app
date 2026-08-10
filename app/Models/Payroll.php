@@ -12,6 +12,7 @@ class Payroll extends Model
 
         protected $fillable = [
             'employee_id',
+            'office_branch_id',
             'month',
             'sundays',
             'year',
@@ -56,6 +57,10 @@ class Payroll extends Model
     public function branch()
     {
         return $this->belongsTo(Branch::class);
+    }
+    public function officeBranch()
+    {
+        return $this->belongsTo(OfficeBranch::class, 'office_branch_id');
     }
     public function partPayments()
     {

@@ -6,6 +6,7 @@
         @php
             $payrollData = [
                 'Employee' => 'Name - ' . ($payroll->employee->full_name ?? '-'),
+                'Office' => 'Office - ' . ($payroll->officeBranch->branch_name ?? $payroll->employee->officeBranch->branch_name ?? 'Not Assigned'),
                 'Month/Year' => 'Month - ' . DateTime::createFromFormat('!m', $payroll->month)->format('F') . ' ' . $payroll->year,
                 'Working Days' => 'Working Days - ' . $payroll->working_days,
                 'Present Days' => 'Present Days - ' . $payroll->present_days,

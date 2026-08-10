@@ -6,6 +6,7 @@ use App\Models\Employee;
 use App\Models\AttendanceDetail;
 use App\Models\LeaveRequest;
 use App\Models\EmployeeStatusLog;
+use App\Models\OfficeBranch;
 use App\Models\GroupTask;
 use App\Models\TaskGroup;
 use App\Models\AuditLog;
@@ -59,6 +60,8 @@ class HomeController
         $customFrom   = $request->input('from');
         $customTo     = $request->input('to');
         $statusFilter = $request->input('status');
+        $officeFilter = $request->input('office_branch_id');
+        $officeBranches = OfficeBranch::orderBy('branch_name')->get();
 
         /* ══════════════════════════════════════════════
            DATE RANGE
@@ -129,12 +132,16 @@ class HomeController
            EMPLOYEES
         ══════════════════════════════════════════════ */
 
-        $employeesQuery = Employee::query();
+        $employeesQuery = Employee::with('officeBranch');
 
         // Non-admin → only own employee data
         if (!$isAdmin && $user) {
 
             $employeesQuery->where('user_id', $user->id);
+        }
+
+        if ($officeFilter) {
+            $employeesQuery->where('office_branch_id', $officeFilter);
         }
 
         $employees = $employeesQuery
@@ -433,6 +440,8 @@ class HomeController
             'customTo',
 
             'statusFilter',
+            'officeFilter',
+            'officeBranches',
 
             'totalPresent',
 

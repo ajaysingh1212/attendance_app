@@ -361,6 +361,7 @@ public function generate(Request $request)
 
         Payroll::create([
             'employee_id' => $employee->id,
+            'office_branch_id' => $employee->office_branch_id,
             'month' => $month,
             'year' => $year,
             'working_days' => $calculation['working_days'],
@@ -498,7 +499,10 @@ public function manualAdjustmentUpdate(Request $request, $payrollId)
         $month = $request->month ?? now()->month;
         $year = $request->year ?? now()->year;
 
-        $payrolls = Payroll::with('employee')->where('month', $month)->where('year', $year)->get();
+        $payrolls = Payroll::with(['employee.officeBranch', 'officeBranch'])
+            ->where('month', $month)
+            ->where('year', $year)
+            ->get();
 
         return view('admin.salary_payroll.list', compact('payrolls', 'month', 'year'));
     }
@@ -581,7 +585,7 @@ public function downloadPayrollPdf($payrollId)
 }
 public function details(Request $request)
 {
-    $payroll = Payroll::with(['employee', 'generatedBy', 'branch'])->findOrFail($request->id);
+    $payroll = Payroll::with(['employee.officeBranch', 'generatedBy', 'branch', 'officeBranch'])->findOrFail($request->id);
 
     $adjustments = PayrollAdjustment::where('employee_id', $payroll->employee_id)->get();
     $attendance = \App\Models\AttendanceDetail::where('user_id', $payroll->employee->user_id ?? null)

@@ -68,7 +68,7 @@
             </li>
         @endcan
         @can('master_data_access')
-            <li class="c-sidebar-nav-dropdown {{ request()->is("admin/companies*") ? "c-show" : "" }} {{ request()->is("admin/branches*") ? "c-show" : "" }}">
+            <li class="c-sidebar-nav-dropdown {{ request()->is("admin/companies*") ? "c-show" : "" }} {{ request()->is("admin/branches*") ? "c-show" : "" }} {{ request()->is("admin/office-branches*") ? "c-show" : "" }}">
                 <a class="c-sidebar-nav-dropdown-toggle" href="#">
                     <i class="fa-fw fas fa-database c-sidebar-nav-icon">
 
@@ -78,6 +78,12 @@
                 <ul class="c-sidebar-nav-dropdown-items">
 
                     @can('branch_access')
+                        <li class="c-sidebar-nav-item">
+                            <a href="{{ route("admin.office-branches.index") }}" class="c-sidebar-nav-link {{ request()->is("admin/office-branches") || request()->is("admin/office-branches/*") ? "c-active" : "" }}">
+                                <i class="fa-fw fas fa-building c-sidebar-nav-icon"></i>
+                                Office Name
+                            </a>
+                        </li>
                         <li class="c-sidebar-nav-item">
                             <a href="{{ route("admin.branches.index") }}" class="c-sidebar-nav-link {{ request()->is("admin/branches") || request()->is("admin/branches/*") ? "c-active" : "" }}">
                                 <i class="fa-fw fas fa-briefcase c-sidebar-nav-icon">

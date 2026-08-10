@@ -17,7 +17,7 @@ class Employee extends Model
         'attendance_source', 'attendance_radius_meter',
         'basic_salary', 'hra', 'other_allowances', 'deductions', 'net_salary',
         'date_of_joining', 'position', 'department', 'reporting_to', 'status', 'status_change_pending',
-        'profile_photo', 'other_allowances_json','branch_id','delay_time','blood_group',
+        'profile_photo', 'other_allowances_json','branch_id','office_branch_id','delay_time','blood_group',
 
         // Document Fields
         'cv', 'offer_letter', 'aadhaar_front', 'aadhaar_back',
@@ -38,9 +38,13 @@ class Employee extends Model
     {
         return $this->belongsTo(User::class, 'reporting_to');
     }
-    public function branch()
+public function branch()
 {
     return $this->belongsTo(Branch::class);
+}
+public function officeBranch()
+{
+    return $this->belongsTo(OfficeBranch::class, 'office_branch_id');
 }
 public function salaryStructure()
 {

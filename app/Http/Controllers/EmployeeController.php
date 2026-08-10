@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Branch;
 use App\Models\Employee;
 use App\Models\EmployeeStatusLog;
+use App\Models\OfficeBranch;
 use App\Models\PayrollAdjustment;
 use App\Models\User;
 use Illuminate\Support\Str;
@@ -30,9 +31,9 @@ class EmployeeController extends Controller
                    && $user->roles()->where('title', 'Admin')->exists();
 
         if ($isAdmin) {
-            $employees = Employee::with('user', 'branch')->get();
+            $employees = Employee::with('user', 'branch', 'officeBranch')->get();
         } else {
-            $employees = Employee::with('user', 'branch')
+            $employees = Employee::with('user', 'branch', 'officeBranch')
                 ->where('user_id', $user->id)
                 ->get();
         }
@@ -64,7 +65,8 @@ class EmployeeController extends Controller
     {
         $users    = User::all();
         $branches = Branch::all();
-        return view('admin.payroll.create', compact('users', 'branches'));
+        $officeBranches = OfficeBranch::orderBy('branch_name')->get();
+        return view('admin.payroll.create', compact('users', 'branches', 'officeBranches'));
     }
 
     /* ══════════════════════════════════════════════════════
@@ -77,6 +79,7 @@ class EmployeeController extends Controller
         $validated = $request->validate([
             'user_id'                    => 'nullable|exists:users,id',
             'branch_id'                  => 'required',
+            'office_branch_id'           => 'nullable|exists:office_branches,id',
             'employee_code'              => 'required|unique:employees,employee_code',
             'full_name'                  => 'required|string|max:255',
             'email'                      => 'nullable|email',
@@ -198,6 +201,7 @@ class EmployeeController extends Controller
             'email'                    => 'nullable|email',
             'phone'                    => 'nullable|string|max:20',
             'branch_id'                => 'required',
+            'office_branch_id'         => 'nullable|exists:office_branches,id',
             'employee_type'            => 'nullable|string|max:50',
             'employee_duration_months' => 'nullable|integer|min:1',
             'date_of_birth'            => 'nullable|date',
@@ -453,6 +457,7 @@ class EmployeeController extends Controller
 
         $users    = User::all();
         $branches = Branch::all();
+        $officeBranches = OfficeBranch::orderBy('branch_name')->get();
 
         // Status logs for audit trail display
         $statusLogs = $employee->statusLogs()
@@ -461,7 +466,7 @@ class EmployeeController extends Controller
                                ->get();
 
         return view('admin.payroll.edit', compact(
-            'employee','users','branches','isAdmin','statusLogs'
+            'employee','users','branches','officeBranches','isAdmin','statusLogs'
         ));
     }
 

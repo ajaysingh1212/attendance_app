@@ -8,7 +8,6 @@ use App\Http\Controllers\Admin\PayrollAdjustmentController;
 use App\Http\Controllers\Admin\PayrollController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\HolidayController;
-use App\Http\Controllers\OfficeBranchController;
 use App\Http\Controllers\Admin\SalaryStructureController;
 use App\Http\Controllers\Admin\TrackMemberController;
 use App\Http\Controllers\Admin\SalaryIncrementController;
@@ -69,6 +68,9 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.', 'namespace' => 'Admin', 'mi
     Route::post('branches/parse-csv-import', 'BranchController@parseCsvImport')->name('branches.parseCsvImport');
     Route::post('branches/process-csv-import', 'BranchController@processCsvImport')->name('branches.processCsvImport');
     Route::resource('branches', 'BranchController');
+
+    // Office Name
+    Route::resource('office-branches', 'OfficeBranchController');
 
     // Attendance Detail
     Route::post('attendance-details/update-status', [AttendanceDetailController::class, 'updateStatus'])->name('attendance-details.updateStatus');

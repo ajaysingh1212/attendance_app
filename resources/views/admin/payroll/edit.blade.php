@@ -289,6 +289,17 @@
                                 @endforeach
                             </select>
                         </div>
+                        <div class="field-group">
+                            <label class="field-label">Office Name</label>
+                            <select class="field-input" name="office_branch_id">
+                                <option value="">Select Office</option>
+                                @foreach($officeBranches as $office)
+                                    <option value="{{ $office->id }}" {{ old('office_branch_id', $employee->office_branch_id) == $office->id ? 'selected' : '' }}>
+                                        {{ $office->branch_name }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
                     </div>
                 </div>
             </div>

@@ -150,6 +150,15 @@
                                     <option value="{{ $branch->id }}">{{ $branch->title }}</option>
                                 @endforeach
                             </select>
+                            <label>Office Name</label>
+                            <select class="form-control mb-2" name="office_branch_id">
+                                <option value="">Select Office</option>
+                                @foreach($officeBranches as $office)
+                                    <option value="{{ $office->id }}" {{ old('office_branch_id') == $office->id ? 'selected' : '' }}>
+                                        {{ $office->branch_name }}
+                                    </option>
+                                @endforeach
+                            </select>
 
 
                         </div>
