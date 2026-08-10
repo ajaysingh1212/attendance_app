@@ -23,12 +23,12 @@ class AttendanceCalendarApiController extends Controller
         $today = Carbon::today();
 
         $counts = [
-            'present'  => 0,
+            'present'   => 0,
             'half_time' => 0,
-            'leave'    => 0,
-            'absent'   => 0,
-            'holiday'  => 0,
-            'week_off' => 0,
+            'leave'     => 0,
+            'absent'    => 0,
+            'holiday'   => 0,
+            'week_off'  => 0,
         ];
 
         // Attendance details keyed by date
@@ -42,76 +42,139 @@ class AttendanceCalendarApiController extends Controller
 
         $holidays = Holiday::where(function ($q) use ($fromDate, $toDate) {
             $q->whereBetween('start_date', [$fromDate, $toDate])
-              ->orWhereBetween('end_date', [$fromDate, $toDate]);
+                ->orWhereBetween('end_date', [$fromDate, $toDate]);
         })->get();
 
         $leaves = LeaveRequest::where('user_id', $userId)
             ->where('status', 'approved')
             ->where(function ($q) use ($fromDate, $toDate) {
                 $q->whereBetween('date_from', [$fromDate, $toDate])
-                  ->orWhereBetween('date_to', [$fromDate, $toDate]);
+                    ->orWhereBetween('date_to', [$fromDate, $toDate]);
             })->get();
 
         $report = [];
         $daysInMonth = $month->daysInMonth;
 
         for ($day = 1; $day <= $daysInMonth; $day++) {
-            $carbonDate = Carbon::create($month->year, $month->month, $day);
+
+            $carbonDate = Carbon::create(
+                $month->year,
+                $month->month,
+                $day
+            );
+
             $dayStr = $carbonDate->format('Y-m-d');
 
             $dayReport = [
                 'date' => $dayStr,
-                'status' => 'absent', // default
+                'status' => 'absent',
             ];
 
             // 1️⃣ Attendance exists → override everything
             if (isset($attendanceDetails[$dayStr])) {
+
                 $att = $attendanceDetails[$dayStr];
-                $dayReport['status'] = $att->status; // present / half_time / absent
+
+                $dayReport['status'] = $att->status;
                 $dayReport['type'] = $att->type;
+
                 $dayReport['punch_in_time'] = $att->punch_in_time;
                 $dayReport['punch_out_time'] = $att->punch_out_time;
+
                 $dayReport['punch_in_location'] = $att->punch_in_location;
                 $dayReport['punch_out_location'] = $att->punch_out_location;
 
+
+                /*
+                |--------------------------------------------------------------------------
+                | 📸 Punch In Image
+                |--------------------------------------------------------------------------
+                */
+
+                $punchInImage = $att->punch_in_image;
+
+                $dayReport['punch_in_image'] = $punchInImage
+                    ? $punchInImage->url
+                    : null;
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | 📸 Punch Out Image
+                |--------------------------------------------------------------------------
+                */
+
+                $punchOutImage = $att->punch_out_image;
+
+                $dayReport['punch_out_image'] = $punchOutImage
+                    ? $punchOutImage->url
+                    : null;
+
+
                 // Count based on status
                 if ($att->status === 'present') {
+
                     $counts['present']++;
+
                 } elseif ($att->status === 'half_time') {
+
                     $counts['half_time']++;
+
                 } elseif ($att->status === 'absent') {
-                    $counts['absent']++; // Absent overrides week_off/holiday
+
+                    $counts['absent']++;
                 }
             }
+
             // 2️⃣ Leave check
             elseif ($leave = $leaves->first(function ($l) use ($dayStr) {
-                return $dayStr >= $l->date_from && $dayStr <= $l->date_to;
+
+                return $dayStr >= $l->date_from
+                    && $dayStr <= $l->date_to;
+
             })) {
+
                 $dayReport['status'] = 'leave';
                 $dayReport['leave_type'] = $leave->title;
+
                 $counts['leave']++;
             }
+
             // 3️⃣ Week off check (Sunday) → priority over holiday
             elseif ($carbonDate->isSunday()) {
+
                 $dayReport['status'] = 'week_off';
+
                 $counts['week_off']++;
             }
+
             // 4️⃣ Holiday check (only if not Sunday)
             elseif ($holiday = $holidays->first(function ($h) use ($dayStr) {
-                return $dayStr >= $h->start_date && $dayStr <= $h->end_date;
+
+                return $dayStr >= $h->start_date
+                    && $dayStr <= $h->end_date;
+
             })) {
+
                 $dayReport['status'] = 'holiday';
                 $dayReport['holiday_title'] = $holiday->title;
+
                 $counts['holiday']++;
             }
+
             // 5️⃣ Default absent → only for today or past dates
             else {
+
                 if ($carbonDate->lte($today)) {
+
                     $dayReport['status'] = 'absent';
-                    $counts['absent']++;
+
+                    $counts['absent'];
+
                 } else {
+
                     // Future date, no data → skip counting
-                    $dayReport['status'] = null; // optional, can keep empty
+                    $dayReport['status'] = null;
                 }
             }
 
