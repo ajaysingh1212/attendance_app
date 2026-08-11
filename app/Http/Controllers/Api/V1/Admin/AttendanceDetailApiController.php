@@ -1037,6 +1037,194 @@ public function attendanceImages($userId)
     }
 }
 
+public function attendanceByDate($date)
+{
+    try {
+
+        // Validate date
+        try {
+            $selectedDate = Carbon::createFromFormat('Y-m-d', $date);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid date format. Use YYYY-MM-DD.'
+            ], 422);
+        }
+
+        $date = $selectedDate->format('Y-m-d');
+
+        /*
+        |--------------------------------------------------------------------------
+        | Get all attendance records for selected date
+        |--------------------------------------------------------------------------
+        */
+
+        $attendanceRecords = AttendanceDetail::with([
+                'user',
+                'employee'
+            ])
+            ->whereDate('date', $date)
+            ->orderBy('punch_in_time', 'asc')
+            ->get();
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Prepare response
+        |--------------------------------------------------------------------------
+        */
+
+        $data = $attendanceRecords->map(function ($attendance) {
+
+            // Punch In Image
+            $punchInImage = $attendance
+                ->getMedia('punch_in_image')
+                ->last();
+
+            // Punch Out Image
+            $punchOutImage = $attendance
+                ->getMedia('punch_out_image')
+                ->last();
+
+
+            return [
+
+                // Attendance
+                'id' => $attendance->id,
+
+                'user_id' => $attendance->user_id,
+
+                'employee_id' => $attendance->employee_id,
+
+                'date' => $attendance->date,
+
+                'status' => $attendance->status,
+
+                'type' => $attendance->type,
+
+
+                // Employee / User
+                'employee_name' => optional($attendance->employee)->full_name
+                    ?? optional($attendance->user)->name
+                    ?? null,
+
+                'employee_code' => optional($attendance->employee)->employee_code,
+
+                'email' => optional($attendance->user)->email,
+
+                'phone' => optional($attendance->user)->number,
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Punch In
+                |--------------------------------------------------------------------------
+                */
+
+                'punch_in' => [
+                    'time' => $attendance->punch_in_time
+                        ? Carbon::parse($attendance->punch_in_time)
+                            ->format('Y-m-d H:i:s')
+                        : null,
+
+                    'latitude' => $attendance->punch_in_latitude,
+
+                    'longitude' => $attendance->punch_in_longitude,
+
+                    'location' => $attendance->punch_in_location,
+
+                    'image' => $punchInImage
+                        ? $punchInImage->getUrl()
+                        : null,
+                ],
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Punch Out
+                |--------------------------------------------------------------------------
+                */
+
+                'punch_out' => [
+                    'time' => $attendance->punch_out_time
+                        ? Carbon::parse($attendance->punch_out_time)
+                            ->format('Y-m-d H:i:s')
+                        : null,
+
+                    'latitude' => $attendance->punch_out_latitude,
+
+                    'longitude' => $attendance->punch_out_longitude,
+
+                    'location' => $attendance->punch_out_location,
+
+                    'image' => $punchOutImage
+                        ? $punchOutImage->getUrl()
+                        : null,
+                ],
+            ];
+        });
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Summary
+        |--------------------------------------------------------------------------
+        */
+
+        $summary = [
+            'total' => $data->count(),
+
+            'present' => $attendanceRecords
+                ->where('status', 'present')
+                ->count(),
+
+            'half_time' => $attendanceRecords
+                ->where('status', 'half_time')
+                ->count(),
+
+            'absent' => $attendanceRecords
+                ->where('status', 'absent')
+                ->count(),
+
+            'punch_in' => $attendanceRecords
+                ->whereNotNull('punch_in_time')
+                ->count(),
+
+            'punch_out' => $attendanceRecords
+                ->whereNotNull('punch_out_time')
+                ->count(),
+        ];
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Final Response
+        |--------------------------------------------------------------------------
+        */
+
+        return response()->json([
+            'success' => true,
+
+            'message' => 'Date-wise attendance fetched successfully',
+
+            'date' => $date,
+
+            'summary' => $summary,
+
+            'data' => $data,
+        ], 200);
+
+
+    } catch (\Exception $e) {
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Error fetching date-wise attendance',
+            'error' => $e->getMessage(),
+        ], 500);
+    }
+}
+
   
 
 
