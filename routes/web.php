@@ -256,7 +256,7 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.', 'namespace' => 'Admin', 'mi
 
     Route::get('employees/{id}/salary-details', [PayrollController::class, 'getSalaryDetails']);
 
-    Route::get('payrolls/download', [PayrollController::class, 'download'])
+    Route::get('payrolls/download', [PayrollController::class, 'downloadPayrollPdf'])
         ->name('payrolls.download');
 
     Route::get('payrolls/details', [PayrollController::class, 'details'])
