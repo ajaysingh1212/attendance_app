@@ -215,7 +215,7 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.', 'namespace' => 'Admin', 'mi
     Route::put('employees/{employee}', [EmployeeController::class, 'update'])->name('employees.update');
     Route::delete('employees/{employee}', [EmployeeController::class, 'destroy'])->name('employees.destroy');
     Route::get('employees/{employee}', [EmployeeController::class, 'show'])->name('employees.show');
-    Route::match(['get', 'post'], '/employees/{employee}/download-pdf', [EmployeeController::class, 'downloadPdf'])
+    Route::match(['get', 'post'], '/employees/{employee}/download-pdf', [EmployeeController::class, 'downloadPayrollPdf'])
     ->name('employees.downloadPdf');
     // Route::get('employees/offer-letter', [App\Http\Controllers\Admin\EmployeeController::class, 'offerLetter'])
     // ->name('employees.offer-letter');
