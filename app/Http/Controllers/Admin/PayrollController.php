@@ -553,9 +553,9 @@ public function manualAdjustmentForm($payrollId)
     return view('admin.salary_payroll.manual_adjustment', compact('payroll','adjustments'));
 }
 
-public function downloadPayrollPdf($payrollId)
+public function downloadPayrollPdf(Payroll $payroll)
 {
-    $payroll = Payroll::with('employee.branch')->findOrFail($payrollId);
+    $payroll->load(['employee.branch', 'generatedBy']);
 
     $startDate = Carbon::create($payroll->year, $payroll->month, 1)->startOfMonth();
     $endDate   = Carbon::create($payroll->year, $payroll->month, 1)->endOfMonth();

@@ -239,7 +239,7 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.', 'namespace' => 'Admin', 'mi
     Route::get('payrolls/manual-adjust/{payrollId}', [PayrollController::class, 'manualAdjustmentForm'])->name('payrolls.manualAdjustForm');
     Route::put('payrolls/manual-adjust/{payrollId}', [PayrollController::class, 'manualAdjustmentUpdate'])->name('payrolls.manualAdjust');
 
-    Route::get('payrolls/download/{payrollId}', [PayrollController::class, 'downloadPayrollPdf'])->name('payrolls.download');
+    Route::get('payrolls/{payroll}/salary-slip', [PayrollController::class, 'downloadPayrollPdf'])->name('payrolls.download');
 
 
     Route::get('payroll', [PayrollController::class, 'index'])
