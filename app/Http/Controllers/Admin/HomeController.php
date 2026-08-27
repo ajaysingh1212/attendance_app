@@ -269,11 +269,23 @@ class HomeController
 
                 return (object) [
 
-                    'user'         => $employee,
+                    'user'               => $employee,
 
-                    'status'       => 'leave',
+                    'punch_in_time'      => null,
 
-                    'leave_detail' => $leave,
+                    'punch_out_time'     => null,
+
+                    'punch_in_image'     => null,
+
+                    'punch_out_image'    => null,
+
+                    'punch_in_location'  => null,
+
+                    'punch_out_location' => null,
+
+                    'status'             => 'leave',
+
+                    'leave_detail'       => $leave,
                 ];
             }
 
@@ -288,9 +300,21 @@ class HomeController
 
             return (object) [
 
-                'user'   => $employee,
+                'user'               => $employee,
 
-                'status' => 'absent',
+                'punch_in_time'      => null,
+
+                'punch_out_time'     => null,
+
+                'punch_in_image'     => null,
+
+                'punch_out_image'    => null,
+
+                'punch_in_location'  => null,
+
+                'punch_out_location' => null,
+
+                'status'             => 'absent',
             ];
 
         })->filter();
