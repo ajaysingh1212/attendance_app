@@ -528,8 +528,19 @@ document.addEventListener('DOMContentLoaded', function () {
        SUMMARY CARDS
     ══════════════════════════════════════════ */
     function updateSummary(events) {
+        const viewStart = new Date(calendar.view.currentStart);
+        const monthStart = new Date(viewStart.getFullYear(), viewStart.getMonth(), 1);
+        const nextMonthStart = new Date(viewStart.getFullYear(), viewStart.getMonth() + 1, 1);
+
+        const currentMonthEvents = (events || []).filter(ev => {
+            const start = ev.start || ev.startStr;
+            if (!start) return false;
+            const date = new Date(start);
+            return date >= monthStart && date < nextMonthStart;
+        });
+
         const counts = { present:0, absent:0, half_time:0, leave:0, paid_leave:0, unpaid_leave:0, week_off:0, holiday:0 };
-        events.forEach(ev => {
+        currentMonthEvents.forEach(ev => {
             const cls = (ev.classNames || [])[0];
             if (cls && counts.hasOwnProperty(cls)) counts[cls]++;
             if (cls === 'week_off_s') counts.week_off++;

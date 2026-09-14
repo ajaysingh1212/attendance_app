@@ -243,7 +243,7 @@
                 </div>
                 <span class="att-badge">{{ $statusLabel }}</span>
             </div>
-            @if($att->status !== 'absent')
+            @if(!in_array($att->status, ['absent', 'leave']))
             <div class="att-times">
                 <div class="att-time-block">
                     <span class="time-label">IN</span>

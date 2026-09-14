@@ -135,7 +135,7 @@
                             <a href="{{ route('admin.payrolls.manualAdjustForm', $payroll->id) }}" class="btn btn-sm btn-info">
                                 <i class="fas fa-sliders-h"></i>
                             </a>
-                            <a href="{{ route('admin.payrolls.download', $payroll->id) }}" class="btn btn-sm btn-danger">
+                            <a href="{{ route('admin.payrolls.download', ['payroll' => $payroll->id]) }}" class="btn btn-sm btn-danger">
                                 <i class="fas fa-file-pdf"></i>
                             </a>
                             <a href="{{ route('admin.payrolls.manualAdjustForm', $payroll->id) }}" class="btn btn-sm btn-primary">
