@@ -163,11 +163,8 @@ Route::group(['prefix' => 'v1', 'as' => 'api.', 'namespace' => 'Api\V1\Admin'], 
     // 📅 Date-wise All Employees Attendance
     Route::get('attendance/date/{date}','AttendanceDetailApiController@attendanceByDate')->name('attendance.date');
 
-    // 👥 Get all active task groups with members
-Route::get(
-    'task-groups',
-    'TaskGroupApiController@index'
-)->name('task-groups.index');
+    // 📋 Get Tasks by User ID
+    Route::get('task-groups/tasks/{userId}','GroupTaskApiController@index')->name('task-groups.tasks.index');
    
     Route::post('task-groups/tasks','GroupTaskApiController@store')->name('task-groups.tasks.store');
     
