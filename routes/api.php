@@ -169,7 +169,11 @@ Route::group(['prefix' => 'v1', 'as' => 'api.', 'namespace' => 'Api\V1\Admin'], 
    
     Route::post('task-groups/tasks','GroupTaskApiController@store')->name('task-groups.tasks.store');
     
-    
+    // ✅ Accept Task
+    Route::post('task-groups/tasks/{taskId}/accept','GroupTaskActionApiController@accept')->name('task-groups.tasks.accept');
+
+    // ✅ Complete Task
+    Route::post('task-groups/tasks/{taskId}/complete','GroupTaskActionApiController@complete')->name('task-groups.tasks.complete');
     
 });
 
