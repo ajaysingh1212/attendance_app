@@ -12,6 +12,369 @@ use Illuminate\Support\Facades\DB;
 
 class GroupTaskApiController extends Controller
 {
+    
+
+    /**
+     * Get tasks for user
+     *
+     * Tasks will be returned when:
+     * 1. User is directly assigned to task
+     * OR
+     * 2. Task belongs to a group in which user is a member
+     */
+    public function index(Request $request, $userId): JsonResponse
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | Check User
+        |--------------------------------------------------------------------------
+        */
+
+        $user = \App\Models\User::find($userId);
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User not found.',
+            ], 404);
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Get Tasks
+        |--------------------------------------------------------------------------
+        */
+
+        $tasks = GroupTask::with([
+            'group',
+            'createdBy',
+            'assignees',
+            'acceptedBy',
+            'completedBy',
+            'pointLogs',
+        ])
+            ->where(function ($query) use ($userId) {
+
+                /*
+                |--------------------------------------------------------------------------
+                | 1. Directly Assigned Tasks
+                |--------------------------------------------------------------------------
+                */
+
+                $query->whereHas('assignees', function ($assigneeQuery) use ($userId) {
+
+                    $assigneeQuery->where('users.id', $userId);
+
+                })
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | OR
+                |--------------------------------------------------------------------------
+                */
+
+                ->orWhereHas('group.members', function ($memberQuery) use ($userId) {
+
+                    $memberQuery->where('users.id', $userId);
+
+                });
+
+            })
+            ->latest()
+            ->get();
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Format Response
+        |--------------------------------------------------------------------------
+        */
+
+        $data = $tasks->map(function ($task) use ($userId) {
+
+            /*
+            |--------------------------------------------------------------------------
+            | Check Direct Assignment
+            |--------------------------------------------------------------------------
+            */
+
+            $isAssigned = $task->assignees
+                ->contains(function ($member) use ($userId) {
+                    return (int) $member->id === (int) $userId;
+                });
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | User's Pivot Status
+            |--------------------------------------------------------------------------
+            */
+
+            $userAssignment = $task->assignees
+                ->first(function ($member) use ($userId) {
+                    return (int) $member->id === (int) $userId;
+                });
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | Return Task
+            |--------------------------------------------------------------------------
+            */
+
+            return [
+
+                'id' => $task->id,
+
+                'task_group_id' => $task->task_group_id,
+
+                'group' => $task->group
+                    ? [
+                        'id' => $task->group->id,
+                        'name' => $task->group->name,
+                        'description' => $task->group->description,
+                    ]
+                    : null,
+
+
+                'title' => $task->title,
+
+                'description' => $task->description,
+
+                'priority' => $task->priority,
+
+                'priority_color' => $task->priority_color,
+
+                'status' => $task->status,
+
+                'due_at' => $task->due_at
+                    ? $task->due_at->format('Y-m-d H:i:s')
+                    : null,
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Deadline
+                |--------------------------------------------------------------------------
+                */
+
+                'deadline_at' => $task->deadline_at
+                    ? $task->deadline_at->format('Y-m-d H:i:s')
+                    : null,
+
+                'is_delayed' => (bool) $task->is_delayed,
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Created By
+                |--------------------------------------------------------------------------
+                */
+
+                'created_by' => $task->createdBy
+                    ? [
+                        'id' => $task->createdBy->id,
+                        'name' => $task->createdBy->name,
+                        'email' => $task->createdBy->email,
+                    ]
+                    : null,
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Current User Assignment
+                |--------------------------------------------------------------------------
+                */
+
+                'is_assigned' => $isAssigned,
+
+                'my_status' => $userAssignment
+                    ? ($userAssignment->pivot->status ?? 'pending')
+                    : null,
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Accepted By
+                |--------------------------------------------------------------------------
+                */
+
+                'accepted_by' => $task->acceptedBy
+                    ? [
+                        'id' => $task->acceptedBy->id,
+                        'name' => $task->acceptedBy->name,
+                    ]
+                    : null,
+
+                'accepted_at' => $task->accepted_at
+                    ? $task->accepted_at->format('Y-m-d H:i:s')
+                    : null,
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Estimate
+                |--------------------------------------------------------------------------
+                */
+
+                'estimate_type' => $task->estimate_type,
+
+                'estimated_hours' => $task->estimated_hours,
+
+                'estimated_date' => $task->estimated_date
+                    ? $task->estimated_date->format('Y-m-d')
+                    : null,
+
+                'accept_narration' => $task->accept_narration,
+
+                'requested_minutes' => $task->requested_minutes,
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Completed
+                |--------------------------------------------------------------------------
+                */
+
+                'completed_by' => $task->completedBy
+                    ? [
+                        'id' => $task->completedBy->id,
+                        'name' => $task->completedBy->name,
+                    ]
+                    : null,
+
+                'completed_at' => $task->completed_at
+                    ? $task->completed_at->format('Y-m-d H:i:s')
+                    : null,
+
+                'completion_narration' => $task->completion_narration,
+
+                'actual_minutes' => $task->actual_minutes,
+
+                'delay_minutes' => $task->delay_minutes,
+
+                'completion_points' => $task->completion_points,
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | All Assignees
+                |--------------------------------------------------------------------------
+                */
+
+                'assignees' => $task->assignees
+                    ->map(function ($member) {
+
+                        return [
+
+                            'id' => $member->id,
+
+                            'name' => $member->name,
+
+                            'email' => $member->email,
+
+                            'number' => $member->number ?? null,
+
+                            'status' =>
+                                $member->pivot->status
+                                ?? 'pending',
+                        ];
+
+                    })
+                    ->values(),
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Points
+                |--------------------------------------------------------------------------
+                */
+
+                'points' => $task->pointLogs
+                    ->map(function ($point) {
+
+                        return [
+
+                            'id' => $point->id,
+
+                            'user_id' => $point->user_id,
+
+                            'points' => $point->points,
+
+                            'reason' => $point->reason,
+
+                            'was_assigned' =>
+                                (bool) $point->was_assigned,
+
+                            'completed_within_deadline' =>
+                                (bool) $point->completed_within_deadline,
+                        ];
+
+                    })
+                    ->values(),
+
+            ];
+        });
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Summary
+        |--------------------------------------------------------------------------
+        */
+
+        $summary = [
+
+            'total' => $tasks->count(),
+
+            'pending' => $tasks
+                ->where('status', 'pending')
+                ->count(),
+
+            'accepted' => $tasks
+                ->where('status', 'accepted')
+                ->count(),
+
+            'completed' => $tasks
+                ->where('status', 'completed')
+                ->count(),
+
+            'delayed' => $tasks
+                ->filter(function ($task) {
+                    return $task->is_delayed;
+                })
+                ->count(),
+
+        ];
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Response
+        |--------------------------------------------------------------------------
+        */
+
+        return response()->json([
+
+            'success' => true,
+
+            'message' => 'Tasks fetched successfully.',
+
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+            ],
+
+            'summary' => $summary,
+
+            'data' => $data->values(),
+
+        ]);
+    }
+
     /**
      * Create New Task
      */

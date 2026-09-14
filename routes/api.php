@@ -160,7 +160,6 @@ Route::group(['prefix' => 'v1', 'as' => 'api.', 'namespace' => 'Api\V1\Admin'], 
 
     Route::get('policy/download', 'DocumentApiController@downloadPolicy')->name('policy.download');
 
-
     // 📅 Date-wise All Employees Attendance
     Route::get('attendance/date/{date}','AttendanceDetailApiController@attendanceByDate')->name('attendance.date');
 
