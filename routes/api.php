@@ -167,6 +167,7 @@ Route::group(['prefix' => 'v1', 'as' => 'api.', 'namespace' => 'Api\V1\Admin'], 
     // 👥 Get all active task groups with members
     Route::get('task-groups','TaskGroupApiController@index')->name('task-groups.index');
    
+    Route::post('task-groups/tasks','GroupTaskApiController@store')->name('task-groups.tasks.store');
     
     
     
