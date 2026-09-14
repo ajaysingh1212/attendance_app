@@ -164,7 +164,8 @@ Route::group(['prefix' => 'v1', 'as' => 'api.', 'namespace' => 'Api\V1\Admin'], 
     // 📅 Date-wise All Employees Attendance
     Route::get('attendance/date/{date}','AttendanceDetailApiController@attendanceByDate')->name('attendance.date');
 
-    
+    // 👥 Get all active task groups with members
+    Route::get('task-groups','TaskGroupApiController@index')->name('task-groups.index');
    
     
     
