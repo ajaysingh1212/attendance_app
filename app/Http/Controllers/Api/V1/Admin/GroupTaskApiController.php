@@ -8,32 +8,38 @@ use App\Models\GroupTaskNotification;
 use App\Models\TaskGroup;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 class GroupTaskApiController extends Controller
 {
     /**
-     * Add new task
+     * Create New Task
      */
     public function store(Request $request): JsonResponse
     {
-        $user = Auth::user();
-
-        if (!$user) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Unauthenticated.',
-            ], 401);
-        }
+        /*
+        |--------------------------------------------------------------------------
+        | Validate Request
+        |--------------------------------------------------------------------------
+        */
 
         $validated = $request->validate([
+
+            // Task creator
+            'created_by_id' => [
+                'required',
+                'integer',
+                'exists:users,id',
+            ],
+
+            // Group
             'task_group_id' => [
                 'required',
                 'integer',
                 'exists:task_groups,id',
             ],
 
+            // Task details
             'title' => [
                 'required',
                 'string',
@@ -56,6 +62,7 @@ class GroupTaskApiController extends Controller
                 'date',
             ],
 
+            // Assignees
             'assignees' => [
                 'required',
                 'array',
@@ -67,6 +74,7 @@ class GroupTaskApiController extends Controller
                 'exists:users,id',
             ],
 
+            // Attachments
             'attachments' => [
                 'nullable',
                 'array',
@@ -77,12 +85,14 @@ class GroupTaskApiController extends Controller
                 'max:10240',
             ],
 
+            // Voice
             'voice_note' => [
                 'nullable',
                 'file',
                 'max:20480',
             ],
         ]);
+
 
         /*
         |--------------------------------------------------------------------------
@@ -93,32 +103,88 @@ class GroupTaskApiController extends Controller
         $group = TaskGroup::with('members')
             ->find($validated['task_group_id']);
 
+
         if (!$group) {
+
             return response()->json([
                 'success' => false,
                 'message' => 'Task group not found.',
             ], 404);
         }
 
+
         /*
         |--------------------------------------------------------------------------
-        | Check Group Access
+        | Check Created By User
         |--------------------------------------------------------------------------
         */
 
-        if (!$user->is_admin) {
+        $creatorExists = $group->members()
+            ->where('users.id', $validated['created_by_id'])
+            ->exists();
 
-            $isMember = $group->members()
-                ->where('users.id', $user->id)
-                ->exists();
 
-            if (!$isMember) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'You are not a member of this task group.',
-                ], 403);
-            }
+        /*
+        | Admin can create task even if not group member
+        |--------------------------------------------------------------------------
+        */
+
+        $creator = \App\Models\User::find($validated['created_by_id']);
+
+
+        if (!$creator) {
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Task creator not found.',
+            ], 404);
         }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Non Admin Creator Must Be Group Member
+        |--------------------------------------------------------------------------
+        */
+
+        if (!$creator->is_admin && !$creatorExists) {
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Task creator is not a member of this group.',
+            ], 403);
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Prepare Assignee IDs
+        |--------------------------------------------------------------------------
+        */
+
+        $assigneeIds = array_values(
+            array_unique(
+                array_map(
+                    'intval',
+                    $validated['assignees']
+                )
+            )
+        );
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Get Group Member IDs
+        |--------------------------------------------------------------------------
+        */
+
+        $groupMemberIds = $group->members()
+            ->pluck('users.id')
+            ->map(function ($id) {
+                return (int) $id;
+            })
+            ->all();
+
 
         /*
         |--------------------------------------------------------------------------
@@ -126,29 +192,21 @@ class GroupTaskApiController extends Controller
         |--------------------------------------------------------------------------
         */
 
-        $assigneeIds = array_values(
-            array_unique(
-                array_map('intval', $validated['assignees'])
-            )
-        );
-
-        $groupMemberIds = $group->members()
-            ->pluck('users.id')
-            ->map(fn ($id) => (int) $id)
-            ->all();
-
         $invalidAssignees = array_diff(
             $assigneeIds,
             $groupMemberIds
         );
 
+
         if (!empty($invalidAssignees)) {
+
             return response()->json([
                 'success' => false,
                 'message' => 'One or more selected assignees are not members of this group.',
                 'invalid_assignees' => array_values($invalidAssignees),
             ], 422);
         }
+
 
         /*
         |--------------------------------------------------------------------------
@@ -161,17 +219,22 @@ class GroupTaskApiController extends Controller
         try {
 
             $task = GroupTask::create([
-                'task_group_id' => $group->id,
-                'created_by_id'  => $user->id,
 
-                'title'       => $validated['title'],
+                'task_group_id' => $group->id,
+
+                'created_by_id' => $validated['created_by_id'],
+
+                'title' => $validated['title'],
+
                 'description' => $validated['description'] ?? null,
-                'priority'    => $validated['priority'],
+
+                'priority' => $validated['priority'],
 
                 'status' => 'pending',
 
                 'due_at' => $validated['due_at'] ?? null,
             ]);
+
 
             /*
             |--------------------------------------------------------------------------
@@ -182,32 +245,42 @@ class GroupTaskApiController extends Controller
             $pivotData = [];
 
             foreach ($assigneeIds as $assigneeId) {
+
                 $pivotData[$assigneeId] = [
                     'status' => 'pending',
                 ];
             }
 
+
             $task->assignees()->sync($pivotData);
+
 
             /*
             |--------------------------------------------------------------------------
-            | Notifications
+            | Create Notifications
             |--------------------------------------------------------------------------
             */
 
             foreach ($assigneeIds as $assigneeId) {
 
                 GroupTaskNotification::create([
+
                     'group_task_id' => $task->id,
-                    'user_id'       => $assigneeId,
-                    'type'          => 'assigned',
-                    'message'       => 'You have been assigned a new task: ' . $task->title,
+
+                    'user_id' => $assigneeId,
+
+                    'type' => 'assigned',
+
+                    'message' =>
+                        'You have been assigned a new task: '
+                        . $task->title,
                 ]);
             }
 
+
             /*
             |--------------------------------------------------------------------------
-            | Attachments
+            | Save Attachments
             |--------------------------------------------------------------------------
             */
 
@@ -221,9 +294,10 @@ class GroupTaskApiController extends Controller
                 }
             }
 
+
             /*
             |--------------------------------------------------------------------------
-            | Voice Note
+            | Save Voice Note
             |--------------------------------------------------------------------------
             */
 
@@ -234,11 +308,19 @@ class GroupTaskApiController extends Controller
                     ->toMediaCollection('voice_notes');
             }
 
-            DB::commit();
 
             /*
             |--------------------------------------------------------------------------
-            | Reload Task
+            | Commit
+            |--------------------------------------------------------------------------
+            */
+
+            DB::commit();
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | Load Relations
             |--------------------------------------------------------------------------
             */
 
@@ -248,10 +330,21 @@ class GroupTaskApiController extends Controller
                 'assignees',
             ]);
 
+
+            /*
+            |--------------------------------------------------------------------------
+            | Success Response
+            |--------------------------------------------------------------------------
+            */
+
             return response()->json([
+
                 'success' => true,
+
                 'message' => 'Task created successfully.',
+
                 'data' => [
+
                     'id' => $task->id,
 
                     'task_group_id' => $task->task_group_id,
@@ -279,21 +372,31 @@ class GroupTaskApiController extends Controller
                         ? [
                             'id' => $task->createdBy->id,
                             'name' => $task->createdBy->name,
+                            'email' => $task->createdBy->email,
                         ]
                         : null,
 
                     'assignees' => $task->assignees
                         ->map(function ($member) {
+
                             return [
+
                                 'id' => $member->id,
+
                                 'name' => $member->name,
+
                                 'email' => $member->email,
-                                'status' => $member->pivot->status ?? 'pending',
+
+                                'status' =>
+                                    $member->pivot->status
+                                    ?? 'pending',
                             ];
                         })
                         ->values(),
                 ],
+
             ], 201);
+
 
         } catch (\Throwable $e) {
 
@@ -302,11 +405,15 @@ class GroupTaskApiController extends Controller
             report($e);
 
             return response()->json([
+
                 'success' => false,
+
                 'message' => 'Unable to create task.',
+
                 'error' => config('app.debug')
                     ? $e->getMessage()
                     : null,
+
             ], 500);
         }
     }
