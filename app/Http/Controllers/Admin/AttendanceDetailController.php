@@ -17,6 +17,7 @@ use App\Models\LeaveRequest;
 use App\Models\User;
 use App\Services\PayrollCalculator;
 use App\Services\OfficeAreaService;
+use App\Services\AttendanceStatusService;
 use Carbon\Carbon;
 use Gate;
 use Illuminate\Http\Request;
@@ -100,9 +101,11 @@ class AttendanceDetailController extends Controller
             'latest_distance_meters' => $match['distance'],
         ];
         if ($match['inside']) {
+            $calculatedStatus = app(AttendanceStatusService::class)->forPunchIn($employee, $attendance->punch_in_time);
             $updates += [
                 'office_area_id' => $match['area']->id,
-                'status' => $attendance->verified_attendance_status ?: 'present',
+                'status' => $calculatedStatus,
+                'verified_attendance_status' => $calculatedStatus,
                 'verification_status' => 'approved',
                 'entered_office_area_at' => now(),
                 'review_note' => 'Employee entered the office area before the review timer expired.',
@@ -416,10 +419,8 @@ class AttendanceDetailController extends Controller
         }
 
         if ($request->input('type') === 'self' && $request->filled('punch_in_time')) {
-            $workStart    = Carbon::parse($employee->work_start_time);
             $punchIn      = Carbon::parse($request->punch_in_time);
-            $delayAllowed = (int) $employee->delay_time;
-            $status       = $punchIn->gt($workStart->copy()->addMinutes($delayAllowed)) ? 'half_time' : 'present';
+            $status       = app(AttendanceStatusService::class)->forPunchIn($employee, $punchIn);
             $request->merge(['status' => $status]);
         }
 

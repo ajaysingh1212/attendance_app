@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\AttendanceDetail;
+use App\Services\AttendanceStatusService;
 use Illuminate\Http\Request;
 
 class AttendanceReviewController extends Controller
@@ -15,7 +16,7 @@ class AttendanceReviewController extends Controller
             ->where('review_deadline_at', '<=', now())
             ->update(['status' => 'suspicious', 'verification_status' => 'suspicious']);
 
-        $items = AttendanceDetail::with(['user', 'employee.officeBranch', 'officeArea'])
+        $items = AttendanceDetail::with(['user', 'employee.branch', 'employee.officeBranch', 'officeArea'])
             ->whereIn('verification_status', ['in_review', 'suspicious'])
             ->latest('punch_in_time')
             ->limit(100)
@@ -24,7 +25,7 @@ class AttendanceReviewController extends Controller
                 'id' => $item->id,
                 'employee' => $item->employee->full_name ?? $item->user->name ?? 'Employee',
                 'employee_code' => $item->employee->employee_code ?? null,
-                'office' => $item->employee->officeBranch->branch_name ?? null,
+                'office' => $item->employee->branch->title ?? $item->employee->officeBranch->branch_name ?? null,
                 'status' => $item->verification_status,
                 'punch_time' => $item->punch_in_time,
                 'punch_location' => $item->punch_in_location,
@@ -45,17 +46,31 @@ class AttendanceReviewController extends Controller
     public function update(Request $request, AttendanceDetail $attendanceDetail)
     {
         $data = $request->validate([
-            'status' => 'required|in:present,half_time,suspicious,absent',
+            'status' => 'required|in:approve,reject,suspicious',
             'review_note' => 'nullable|string|max:1000',
         ]);
 
+        $finalStatus = $data['status'];
+        $verificationStatus = $data['status'];
+        if ($data['status'] === 'approve') {
+            $attendanceDetail->loadMissing('employee');
+            $finalStatus = $attendanceDetail->employee && $attendanceDetail->punch_in_time
+                ? app(AttendanceStatusService::class)->forPunchIn($attendanceDetail->employee, $attendanceDetail->punch_in_time)
+                : ($attendanceDetail->verified_attendance_status ?: 'present');
+            $verificationStatus = 'approved';
+        } elseif ($data['status'] === 'reject') {
+            $finalStatus = 'absent';
+            $verificationStatus = 'rejected';
+        }
+
         $attendanceDetail->update([
-            'status' => $data['status'],
-            'verification_status' => in_array($data['status'], ['present', 'half_time']) ? 'approved' : $data['status'],
+            'status' => $finalStatus,
+            'verified_attendance_status' => $finalStatus,
+            'verification_status' => $verificationStatus,
             'review_note' => $data['review_note'] ?? $attendanceDetail->review_note,
             'changed_by' => auth()->id(),
         ]);
 
-        return response()->json(['success' => true, 'message' => 'Attendance status updated.']);
+        return response()->json(['success' => true, 'message' => 'Attendance status updated.', 'status' => $finalStatus]);
     }
 }

@@ -21,6 +21,7 @@ use App\Mail\UserMonthlyAttendanceMail;
 use Illuminate\Support\Facades\Mail;
 use App\Models\User;
 use App\Services\OfficeAreaService;
+use App\Services\AttendanceStatusService;
 
 use Illuminate\Support\Facades\Log;
 
@@ -159,10 +160,25 @@ class AttendanceDetailApiController extends Controller
                     ], 403);
                 }
             
-                $expectedStart = \Carbon\Carbon::parse($employee->work_start_time);
                 $now = now();
+                $expectedStart = $now->copy()->setTimeFromTimeString(\Carbon\Carbon::parse($employee->work_start_time)->format('H:i:s'));
                 $lateMinutes = $now->gt($expectedStart) ? $expectedStart->diffInMinutes($now) : 0;
-                $status = ($lateMinutes > $employee->delay_time) ? 'half_time' : 'present';
+                $status = app(AttendanceStatusService::class)->forPunchIn($employee, $now);
+                $verification = null;
+                $areaMatch = null;
+                $attendanceAnywhere = strtolower(trim((string) $employee->branch_id)) === 'anywhere'
+                    || strtolower(trim((string) $employee->attendance_source)) === 'anywhere';
+                if (!$attendanceAnywhere) {
+                    $areaMatch = app(OfficeAreaService::class)->locate(
+                        $employee,
+                        (float) $request->latitude,
+                        (float) $request->longitude
+                    );
+                    if ($areaMatch['area']) {
+                        $verification = $areaMatch['inside'] ? 'approved' : 'in_review';
+                    }
+                }
+                $attendanceStatus = $verification === 'in_review' ? 'in_review' : $status;
             
                 $attendance = AttendanceDetail::create([
                     'user_id'            => $request->user_id,
@@ -398,9 +414,11 @@ class AttendanceDetailApiController extends Controller
             'latest_distance_meters' => $match['distance'],
         ];
         if ($match['inside']) {
+            $calculatedStatus = app(AttendanceStatusService::class)->forPunchIn($employee, $attendance->punch_in_time);
             $updates += [
                 'office_area_id' => $match['area']->id,
-                'status' => $attendance->verified_attendance_status ?: 'present',
+                'status' => $calculatedStatus,
+                'verified_attendance_status' => $calculatedStatus,
                 'verification_status' => 'approved',
                 'entered_office_area_at' => now(),
                 'review_note' => 'Employee entered the office area before the review timer expired.',

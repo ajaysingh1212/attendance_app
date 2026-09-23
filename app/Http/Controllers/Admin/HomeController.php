@@ -178,10 +178,10 @@ class HomeController
            ATTENDANCE
         ══════════════════════════════════════════════ */
 
-        $attendances = AttendanceDetail::whereBetween(
-                'punch_in_time',
-                [$startDate, $endDate]
-            )
+        $attendances = AttendanceDetail::whereBetween('date', [
+                $startDate->toDateString(),
+                $endDate->toDateString(),
+            ])
             ->get();
 
         /* ══════════════════════════════════════════════
