@@ -46,14 +46,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::table('attendance_details', function (Blueprint $table) {
-            $table->dropConstrainedForeignId('office_area_id');
-            $table->dropColumn([
-                'verification_status', 'verified_attendance_status', 'review_started_at',
-                'review_deadline_at', 'entered_office_area_at', 'latest_latitude',
-                'latest_longitude', 'punch_distance_meters', 'latest_distance_meters', 'review_note',
-            ]);
-        });
-        Schema::dropIfExists('office_areas');
+        // This migration repairs a partial production deployment. Rollback must not
+        // remove columns that may have been created by the primary migration.
     }
 };

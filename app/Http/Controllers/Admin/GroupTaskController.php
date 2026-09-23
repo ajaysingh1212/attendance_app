@@ -416,7 +416,9 @@ class GroupTaskController extends Controller
 
         return response()->json([
             'ring'          => $ringTasks,
-            'notifications' => $notifications->merge($groupNotifs)->values(),
+            // map() keeps the Eloquent collection type even though its items are arrays.
+            // Eloquent merge() expects models and calls getKey(), so merge as base collections.
+            'notifications' => $notifications->toBase()->merge($groupNotifs->toBase())->values(),
             'active_tasks'  => $myActiveTasks,
             'summary'       => $summary,
             'groups'        => $groupsSummary,
