@@ -204,6 +204,8 @@
         </div>
     </div>
 
+    @include('admin.attendanceDetails.partials.review_dashboard')
+
     {{-- ── Attendance Cards ── --}}
     <div class="section-header mt-4">
         <h5>📋 Employee Attendance</h5>

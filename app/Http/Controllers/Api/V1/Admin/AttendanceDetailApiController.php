@@ -20,6 +20,7 @@ use App\Mail\AttendancePunchMail;
 use App\Mail\UserMonthlyAttendanceMail;
 use Illuminate\Support\Facades\Mail;
 use App\Models\User;
+use App\Services\OfficeAreaService;
 
 use Illuminate\Support\Facades\Log;
 
@@ -138,6 +139,22 @@ class AttendanceDetailApiController extends Controller
                 $now = now();
                 $lateMinutes = $now->gt($expectedStart) ? $expectedStart->diffInMinutes($now) : 0;
                 $status = ($lateMinutes > $employee->delay_time) ? 'half_time' : 'present';
+                $verification = null;
+                $areaMatch = null;
+                $attendanceAnywhere = strtolower(trim((string) $employee->branch_id)) === 'anywhere'
+                    || strtolower(trim((string) $employee->attendance_source)) === 'anywhere';
+
+                if (!$attendanceAnywhere && $request->filled('latitude') && $request->filled('longitude')) {
+                    $areaMatch = app(OfficeAreaService::class)->locate(
+                        $employee,
+                        (float) $request->latitude,
+                        (float) $request->longitude
+                    );
+                    if ($areaMatch['area']) {
+                        $verification = $areaMatch['inside'] ? 'approved' : 'in_review';
+                    }
+                }
+                $attendanceStatus = $verification === 'in_review' ? 'in_review' : $status;
             
                 $attendance = AttendanceDetail::create([
                     'user_id'            => $request->user_id,
@@ -146,7 +163,18 @@ class AttendanceDetailApiController extends Controller
                     'punch_in_latitude'  => $request->latitude,
                     'punch_in_longitude' => $request->longitude,
                     'punch_in_location'  => $request->location,
-                    'status'             => $status,
+                    'status'             => $attendanceStatus,
+                    'verified_attendance_status' => $status,
+                    'verification_status' => $verification,
+                    'office_area_id'     => $areaMatch['area']->id ?? null,
+                    'review_started_at'  => $verification === 'in_review' ? $now : null,
+                    'review_deadline_at' => $verification === 'in_review' ? $now->copy()->addMinutes($areaMatch['area']->review_minutes) : null,
+                    'entered_office_area_at' => $verification === 'approved' ? $now : null,
+                    'latest_latitude'    => $request->latitude,
+                    'latest_longitude'   => $request->longitude,
+                    'punch_distance_meters' => $areaMatch['distance'] ?? null,
+                    'latest_distance_meters' => $areaMatch['distance'] ?? null,
+                    'review_note'        => $verification === 'in_review' ? 'Punch-in was outside the configured office area.' : null,
                     'type'               => 'self',
                     'date'               => $todayDate,
                 ]);
@@ -189,7 +217,7 @@ class AttendanceDetailApiController extends Controller
                                     'actual_in'         => $now->format('H:i:s'),
                                     'late_by_minutes'   => $lateMinutes,
                 
-                                    'status'            => $status,
+                                    'status'            => $attendanceStatus,
                                     'type'              => 'self',
                                 ]
                             )
@@ -205,7 +233,11 @@ class AttendanceDetailApiController extends Controller
             
                 return response()->json([
                     'success'    => true,
-                    'message'    => 'Punch-in recorded successfully',
+                    'message'    => $verification === 'in_review'
+                        ? 'Punch-in recorded and sent for location review.'
+                        : 'Punch-in recorded successfully',
+                    'verification_status' => $verification,
+                    'review_deadline_at' => $attendance->review_deadline_at,
                     'attendance' => new AttendanceDetailResource($attendance)
                 ], 200);
             }
@@ -326,6 +358,52 @@ class AttendanceDetailApiController extends Controller
                 'error'   => $e->getMessage()
             ], 500);
         }
+    }
+
+    public function updateLiveLocation(Request $request)
+    {
+        $data = $request->validate([
+            'user_id' => 'required|exists:users,id',
+            'latitude' => 'required|numeric|between:-90,90',
+            'longitude' => 'required|numeric|between:-180,180',
+        ]);
+        $employee = \App\Models\Employee::where('user_id', $data['user_id'])->firstOrFail();
+        $attendance = AttendanceDetail::where('user_id', $data['user_id'])
+            ->where('date', now()->toDateString())->latest()->firstOrFail();
+
+        if ($attendance->verification_status !== 'in_review') {
+            return response()->json(['success' => true, 'status' => $attendance->verification_status ?? 'approved']);
+        }
+
+        if ($attendance->review_deadline_at && now()->greaterThanOrEqualTo($attendance->review_deadline_at)) {
+            $attendance->update(['status' => 'suspicious', 'verification_status' => 'suspicious']);
+            return response()->json(['success' => true, 'status' => 'suspicious', 'remaining_seconds' => 0]);
+        }
+
+        $match = app(OfficeAreaService::class)->locate($employee, (float) $data['latitude'], (float) $data['longitude']);
+        $updates = [
+            'latest_latitude' => $data['latitude'],
+            'latest_longitude' => $data['longitude'],
+            'latest_distance_meters' => $match['distance'],
+        ];
+        if ($match['inside']) {
+            $updates += [
+                'office_area_id' => $match['area']->id,
+                'status' => $attendance->verified_attendance_status ?: 'present',
+                'verification_status' => 'approved',
+                'entered_office_area_at' => now(),
+                'review_note' => 'Employee entered the office area before the review timer expired.',
+            ];
+        }
+        $attendance->update($updates);
+
+        return response()->json([
+            'success' => true,
+            'status' => $attendance->fresh()->verification_status,
+            'inside_office_area' => $match['inside'],
+            'distance_meters' => $match['distance'],
+            'remaining_seconds' => max(0, now()->diffInSeconds($attendance->review_deadline_at, false)),
+        ]);
     }
     
     

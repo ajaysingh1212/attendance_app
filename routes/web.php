@@ -71,6 +71,9 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.', 'namespace' => 'Admin', 'mi
 
     // Office Name
     Route::resource('office-branches', 'OfficeBranchController');
+    Route::resource('office-areas', 'OfficeAreaController')->except(['create', 'show', 'edit']);
+    Route::get('attendance-reviews/feed', 'AttendanceReviewController@feed')->name('attendance-reviews.feed');
+    Route::patch('attendance-reviews/{attendanceDetail}', 'AttendanceReviewController@update')->name('attendance-reviews.update');
 
     // Attendance Detail
     Route::post('attendance-details/update-status', [AttendanceDetailController::class, 'updateStatus'])->name('attendance-details.updateStatus');

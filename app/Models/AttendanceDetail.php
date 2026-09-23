@@ -26,6 +26,9 @@ class AttendanceDetail extends Model implements HasMedia
         'created_at',
         'updated_at',
         'deleted_at',
+        'review_started_at',
+        'review_deadline_at',
+        'entered_office_area_at',
     ];
 
     /**
@@ -43,6 +46,8 @@ class AttendanceDetail extends Model implements HasMedia
         'holiday'    => 'Holiday',
         'late'       => 'Late',
         'paid_leave' => 'Paid Leave',
+        'in_review'  => 'In Review',
+        'suspicious' => 'Suspicious',
     ];
 
     protected $fillable = [
@@ -61,6 +66,17 @@ class AttendanceDetail extends Model implements HasMedia
         'status',
         'type',
         'changed_by',
+        'office_area_id',
+        'verification_status',
+        'verified_attendance_status',
+        'review_started_at',
+        'review_deadline_at',
+        'entered_office_area_at',
+        'latest_latitude',
+        'latest_longitude',
+        'punch_distance_meters',
+        'latest_distance_meters',
+        'review_note',
         'ip_address',
         'device_name',
         'created_at',
@@ -92,6 +108,11 @@ class AttendanceDetail extends Model implements HasMedia
     public function employee()
     {
         return $this->belongsTo(Employee::class, 'employee_id');
+    }
+
+    public function officeArea()
+    {
+        return $this->belongsTo(OfficeArea::class);
     }
 
     /*

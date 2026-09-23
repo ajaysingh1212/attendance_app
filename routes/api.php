@@ -78,6 +78,7 @@ Route::group(['prefix' => 'v1', 'as' => 'api.', 'namespace' => 'Api\V1\Admin'], 
     
     // ⏰ Attendance Punch In/Out
     Route::post('attendance/punch', 'AttendanceDetailApiController@punchAttendance')->name('attendance.punch');
+    Route::post('attendance/location', 'AttendanceDetailApiController@updateLiveLocation')->name('attendance.location');
     
     // 📅 Today Attendance by User
     Route::get('attendance/today/{userId}', 'AttendanceDetailApiController@todayAttendance')->name('attendance.today');
@@ -175,7 +176,6 @@ Route::group(['prefix' => 'v1', 'as' => 'api.', 'namespace' => 'Api\V1\Admin'], 
     Route::post('task-groups/tasks/{taskId}/complete','GroupTaskActionApiController@complete')->name('task-groups.tasks.complete');
     
 });
-
 
 
 

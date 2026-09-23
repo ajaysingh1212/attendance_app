@@ -64,6 +64,8 @@
                     <th>Unpaid Leaves</th>
                     <th>Absent</th>
                     <th>Holidays</th>
+                    <th>Sundays</th>
+                    <th>Days Worked</th>
                     <th>Final Paid Days</th>
                     <th>Working Days</th>
                     <th>Basic</th>
@@ -98,6 +100,8 @@
                         <td>{{ $payroll->leave_days ?? '0' }}</td>
                         <td>{{ $payroll->absent_days ?? '0' }}</td>
                         <td>{{ $payroll->holidays ?? '0' }}</td>
+                        <td>{{ $payroll->valid_sundays ?? '0' }}</td>
+                        <td>{{ ($payroll->present_days ?? 0) + ($payroll->half_days ?? 0) }}</td>
                         <td>{{ $payroll->final_paid_days ?? '-' }}</td>
                         <td>{{ $payroll->working_days }}</td>
                         <td>₹{{ number_format($payroll->basic ?? 0, 2) }}</td>

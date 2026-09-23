@@ -1,4 +1,14 @@
 <div id="sidebar" class="c-sidebar c-sidebar-fixed c-sidebar-lg-show">
+    <style>
+        #sidebar .c-sidebar-nav-dropdown-items .c-sidebar-nav-link.c-active {
+            background: #2563eb;
+            color: #fff;
+            border-left: 4px solid #fbbf24;
+        }
+        #sidebar .c-sidebar-nav-dropdown-items .c-sidebar-nav-link.c-active .c-sidebar-nav-icon {
+            color: #fff;
+        }
+    </style>
 
     <div class="c-sidebar-brand d-md-down-none">
         <a class="c-sidebar-brand-full h4" href="#">
@@ -68,7 +78,7 @@
             </li>
         @endcan
         @can('master_data_access')
-            <li class="c-sidebar-nav-dropdown {{ request()->is("admin/companies*") ? "c-show" : "" }} {{ request()->is("admin/branches*") ? "c-show" : "" }} {{ request()->is("admin/office-branches*") ? "c-show" : "" }}">
+            <li class="c-sidebar-nav-dropdown {{ request()->is("admin/companies*") ? "c-show" : "" }} {{ request()->is("admin/branches*") ? "c-show" : "" }} {{ request()->is("admin/office-branches*") ? "c-show" : "" }} {{ request()->is("admin/office-areas*") ? "c-show" : "" }}">
                 <a class="c-sidebar-nav-dropdown-toggle" href="#">
                     <i class="fa-fw fas fa-database c-sidebar-nav-icon">
 
@@ -90,6 +100,12 @@
 
                                 </i>
                                 {{ trans('cruds.branch.title') }}
+                            </a>
+                        </li>
+                        <li class="c-sidebar-nav-item">
+                            <a href="{{ route('admin.office-areas.index') }}" class="c-sidebar-nav-link {{ request()->is('admin/office-areas*') ? 'c-active' : '' }}">
+                                <i class="fa-fw fas fa-draw-polygon c-sidebar-nav-icon"></i>
+                                Office Area
                             </a>
                         </li>
                     @endcan
