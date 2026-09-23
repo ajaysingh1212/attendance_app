@@ -45,7 +45,7 @@ class GroupTask extends Model implements HasMedia
 
     public function registerMediaConversions(Media $media = null): void
     {
-        $this->addMediaConversion('thumb')->fit('crop', 60, 60)->nonQueued();
+        $this->addMediaConversion('thumb')->fit(\Spatie\Image\Enums\Fit::Crop, 60, 60)->nonQueued();
     }
 
     /* ── Relationships ── */
