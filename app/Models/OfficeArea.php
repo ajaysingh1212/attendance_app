@@ -10,7 +10,7 @@ class OfficeArea extends Model
     use HasFactory;
 
     protected $fillable = [
-        'office_branch_id', 'name', 'latitude', 'longitude', 'radius_meters',
+        'office_branch_id', 'branch_id', 'name', 'latitude', 'longitude', 'radius_meters',
         'review_minutes', 'color', 'is_active',
     ];
 
@@ -25,5 +25,10 @@ class OfficeArea extends Model
     public function officeBranch()
     {
         return $this->belongsTo(OfficeBranch::class);
+    }
+
+    public function branch()
+    {
+        return $this->belongsTo(Branch::class);
     }
 }

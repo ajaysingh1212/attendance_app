@@ -4,14 +4,14 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\OfficeArea;
-use App\Models\OfficeBranch;
+use App\Models\Branch;
 use Illuminate\Http\Request;
 
 class OfficeAreaController extends Controller
 {
     public function index()
     {
-        $areas = OfficeArea::with('officeBranch')->orderBy('radius_meters')->get();
+        $areas = OfficeArea::with(['branch', 'officeBranch'])->orderBy('radius_meters')->get();
 
         return view('admin.officeAreas.index', [
             'areas' => $areas,
@@ -23,7 +23,7 @@ class OfficeAreaController extends Controller
                 'radius_meters' => $area->radius_meters,
                 'color' => $area->color,
             ])->values(),
-            'branches' => OfficeBranch::orderBy('branch_name')->get(),
+            'branches' => Branch::orderBy('title')->get(),
             'mapsKey' => config('services.google_maps.key'),
         ]);
     }
@@ -49,7 +49,7 @@ class OfficeAreaController extends Controller
     private function validated(Request $request): array
     {
         $data = $request->validate([
-            'office_branch_id' => 'nullable|exists:office_branches,id',
+            'branch_id' => 'required|exists:branches,id',
             'name' => 'required|string|max:100',
             'latitude' => 'required|numeric|between:-90,90',
             'longitude' => 'required|numeric|between:-180,180',
@@ -57,6 +57,7 @@ class OfficeAreaController extends Controller
             'review_minutes' => 'required|integer|min:1|max:1440',
             'color' => ['required', 'regex:/^#[0-9A-Fa-f]{6}$/'],
         ]);
+        $data['office_branch_id'] = null;
         $data['is_active'] = $request->boolean('is_active');
         return $data;
     }

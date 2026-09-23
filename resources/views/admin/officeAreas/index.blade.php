@@ -17,7 +17,7 @@
             <form method="POST" action="{{ route('admin.office-areas.store') }}" id="areaForm">
                 @csrf
                 <div class="form-group"><label>Area name</label><input class="form-control" name="name" required placeholder="Main office radius"></div>
-                <div class="form-group"><label>Office</label><select class="form-control" name="office_branch_id" id="officeBranchSelect"><option value="">Select office or use live location</option>@foreach($branches as $branch)<option value="{{ $branch->id }}" data-latitude="{{ $branch->latitude }}" data-longitude="{{ $branch->longitude }}">{{ $branch->branch_name }}</option>@endforeach</select></div>
+                <div class="form-group"><label>Branch</label><select class="form-control" name="branch_id" id="officeBranchSelect" required><option value="">Select branch</option>@foreach($branches as $branch)<option value="{{ $branch->id }}" data-latitude="{{ $branch->latitude }}" data-longitude="{{ $branch->longitude }}" data-address="{{ $branch->address }}">{{ $branch->title }}{{ $branch->address ? ' - '.$branch->address : '' }}</option>@endforeach</select><small class="text-muted">Branches are loaded from Master Data &gt; Branch.</small></div>
                 <div class="form-row"><div class="form-group col-6"><label>Latitude</label><input class="form-control" id="latitude" name="latitude" required readonly></div><div class="form-group col-6"><label>Longitude</label><input class="form-control" id="longitude" name="longitude" required readonly></div></div>
                 <div class="form-row"><div class="form-group col-6"><label>Radius (meters)</label><input type="number" class="form-control" id="radius" name="radius_meters" value="100" min="1" required></div><div class="form-group col-6"><label>Review time (minutes)</label><input type="number" class="form-control" name="review_minutes" value="10" min="1" required></div></div>
                 <div class="form-row align-items-end"><div class="form-group col-6"><label>Circle color</label><input type="color" class="form-control" id="color" name="color" value="#2563eb"></div><div class="form-group col-6"><label><input type="checkbox" name="is_active" value="1" checked> Active</label></div></div>
@@ -29,7 +29,7 @@
             @forelse($areas as $area)
                 <div class="area-row" style="--area-color:{{ $area->color }}">
                     <strong>{{ $area->name }}</strong> @if(!$area->is_active)<span class="badge badge-secondary">Disabled</span>@endif
-                    <div class="area-meta">{{ $area->officeBranch->branch_name ?? 'All offices' }} | {{ $area->radius_meters }} m | {{ $area->review_minutes }} min review</div>
+                    <div class="area-meta">{{ $area->branch->title ?? $area->officeBranch->branch_name ?? 'Legacy area' }} | {{ $area->radius_meters }} m | {{ $area->review_minutes }} min review</div>
                     <div class="area-actions">
                         <button type="button" class="btn btn-sm btn-outline-primary" onclick="focusArea({{ $area->latitude }},{{ $area->longitude }},{{ $area->radius_meters }})"><i class="fas fa-crosshairs"></i></button>
                         <form method="POST" action="{{ route('admin.office-areas.destroy', $area) }}" onsubmit="return confirm('Remove this office area?')">@csrf @method('DELETE')<button class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button></form>

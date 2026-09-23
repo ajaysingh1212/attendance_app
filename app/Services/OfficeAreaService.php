@@ -19,9 +19,9 @@ class OfficeAreaService
 
         return OfficeArea::query()
             ->where('is_active', true)
-            ->when($employee?->office_branch_id, function ($query, $branchId) {
+            ->when($employee?->branch_id, function ($query, $branchId) {
                 $query->where(function ($q) use ($branchId) {
-                    $q->whereNull('office_branch_id')->orWhere('office_branch_id', $branchId);
+                    $q->whereNull('branch_id')->orWhere('branch_id', $branchId);
                 });
             })
             ->orderBy('radius_meters')
