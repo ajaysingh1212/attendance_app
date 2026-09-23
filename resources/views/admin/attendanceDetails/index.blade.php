@@ -186,10 +186,16 @@
         </a>
     </div>
     @if($todayReview)
+    @php
+        $reviewDeadlineTimestamp = $todayReview->review_deadline_at
+            ? \Carbon\Carbon::parse($todayReview->review_deadline_at)->timestamp
+            : null;
+        $reviewNowTimestamp = now()->timestamp;
+    @endphp
     <div id="employeeReviewTimer" class="employee-review-box {{ $todayReview->verification_status === 'suspicious' ? 'is-suspicious' : '' }}"
          data-status="{{ $todayReview->verification_status }}"
-         data-remaining-seconds="{{ $todayReview->review_deadline_at ? max(0, $todayReview->review_deadline_at->timestamp - now()->timestamp) : 0 }}"
-         data-overdue-seconds="{{ $todayReview->review_deadline_at ? max(0, now()->timestamp - $todayReview->review_deadline_at->timestamp) : 0 }}"
+         data-remaining-seconds="{{ $reviewDeadlineTimestamp ? max(0, $reviewDeadlineTimestamp - $reviewNowTimestamp) : 0 }}"
+         data-overdue-seconds="{{ $reviewDeadlineTimestamp ? max(0, $reviewNowTimestamp - $reviewDeadlineTimestamp) : 0 }}"
          data-arrived="{{ $todayReview->entered_office_area_at ? '1' : '0' }}"
          data-arrival-delay-seconds="{{ $todayReview->arrival_delay_seconds ?? 0 }}">
         <div class="review-box-icon"><i class="fas fa-map-marker-alt"></i></div>

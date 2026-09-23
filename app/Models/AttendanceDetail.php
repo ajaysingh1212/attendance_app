@@ -35,7 +35,12 @@ class AttendanceDetail extends Model implements HasMedia
      * Do NOT cast 'date' to Carbon here — it breaks getRawOriginal() and keyBy().
      * The controller uses getRawOriginal('date') to always get the raw Y-m-d string.
      */
-    protected $casts = [];
+    protected $casts = [
+        'review_started_at' => 'datetime',
+        'review_deadline_at' => 'datetime',
+        'entered_office_area_at' => 'datetime',
+        'arrival_delay_seconds' => 'integer',
+    ];
 
     public const STATUS_SELECT = [
         'absent'     => 'Absent',
