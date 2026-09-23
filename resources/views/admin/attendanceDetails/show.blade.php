@@ -127,6 +127,12 @@
                             {{ App\Models\AttendanceDetail::STATUS_SELECT[$attendanceDetail->status] ?? '' }}
                         </td>
                     </tr>
+                    @if($attendanceDetail->review_note)
+                    <tr>
+                        <th>Late Approval Reason</th>
+                        <td>{{ $attendanceDetail->review_note }}</td>
+                    </tr>
+                    @endif
                 </tbody>
             </table>
             <div class="form-group">

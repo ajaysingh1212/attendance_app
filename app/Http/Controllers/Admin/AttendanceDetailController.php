@@ -18,6 +18,7 @@ use App\Models\User;
 use App\Services\PayrollCalculator;
 use App\Services\OfficeAreaService;
 use App\Services\AttendanceStatusService;
+use App\Services\AttendanceLocationReviewService;
 use Carbon\Carbon;
 use Gate;
 use Illuminate\Http\Request;
@@ -59,7 +60,7 @@ class AttendanceDetailController extends Controller
         return view('admin.attendanceDetails.index', compact('users', 'defaultUserId', 'todayReview'));
     }
 
-    public function updateOwnLiveLocation(Request $request, OfficeAreaService $areaService)
+    public function updateOwnLiveLocation(Request $request, AttendanceLocationReviewService $reviewService)
     {
         abort_if(auth()->user()->is_admin, Response::HTTP_FORBIDDEN, 'Employee location endpoint only.');
         $data = $request->validate([
@@ -72,54 +73,12 @@ class AttendanceDetailController extends Controller
             ->latest()
             ->firstOrFail();
 
-        if ($attendance->verification_status !== 'in_review') {
-            return response()->json([
-                'status' => $attendance->verification_status ?? 'approved',
-                'attendance_status' => $attendance->status,
-                'remaining_seconds' => 0,
-            ]);
-        }
-
-        if ($attendance->review_deadline_at && now()->greaterThanOrEqualTo($attendance->review_deadline_at)) {
-            $attendance->update([
-                'status' => 'suspicious',
-                'verification_status' => 'suspicious',
-                'review_note' => 'Employee did not enter the office area before the review timer expired.',
-            ]);
-
-            return response()->json(['status' => 'suspicious', 'attendance_status' => 'suspicious', 'remaining_seconds' => 0]);
-        }
-
-        if (!isset($data['latitude'], $data['longitude'])) {
-            return response()->json(['message' => 'Live location is required while attendance is in review.'], 422);
-        }
-
-        $match = $areaService->locate($employee, (float) $data['latitude'], (float) $data['longitude']);
-        $updates = [
-            'latest_latitude' => $data['latitude'],
-            'latest_longitude' => $data['longitude'],
-            'latest_distance_meters' => $match['distance'],
-        ];
-        if ($match['inside']) {
-            $calculatedStatus = app(AttendanceStatusService::class)->forPunchIn($employee, $attendance->punch_in_time);
-            $updates += [
-                'office_area_id' => $match['area']->id,
-                'status' => $calculatedStatus,
-                'verified_attendance_status' => $calculatedStatus,
-                'verification_status' => 'approved',
-                'entered_office_area_at' => now(),
-                'review_note' => 'Employee entered the office area before the review timer expired.',
-            ];
-        }
-        $attendance->update($updates);
-
-        return response()->json([
-            'status' => $attendance->fresh()->verification_status,
-            'attendance_status' => $attendance->fresh()->status,
-            'inside_office_area' => $match['inside'],
-            'distance_meters' => $match['distance'],
-            'remaining_seconds' => max(0, now()->diffInSeconds($attendance->review_deadline_at, false)),
-        ]);
+        return response()->json($reviewService->update(
+            $attendance,
+            $employee,
+            isset($data['latitude']) ? (float) $data['latitude'] : null,
+            isset($data['longitude']) ? (float) $data['longitude'] : null,
+        ));
     }
 
     /*

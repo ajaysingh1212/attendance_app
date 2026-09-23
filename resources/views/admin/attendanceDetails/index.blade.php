@@ -188,14 +188,17 @@
     @if($todayReview)
     <div id="employeeReviewTimer" class="employee-review-box {{ $todayReview->verification_status === 'suspicious' ? 'is-suspicious' : '' }}"
          data-status="{{ $todayReview->verification_status }}"
-         data-deadline="{{ optional($todayReview->review_deadline_at)->toIso8601String() }}">
+         data-remaining-seconds="{{ $todayReview->review_deadline_at ? max(0, $todayReview->review_deadline_at->timestamp - now()->timestamp) : 0 }}"
+         data-overdue-seconds="{{ $todayReview->review_deadline_at ? max(0, now()->timestamp - $todayReview->review_deadline_at->timestamp) : 0 }}"
+         data-arrived="{{ $todayReview->entered_office_area_at ? '1' : '0' }}"
+         data-arrival-delay-seconds="{{ $todayReview->arrival_delay_seconds ?? 0 }}">
         <div class="review-box-icon"><i class="fas fa-map-marker-alt"></i></div>
         <div class="review-box-copy">
             <span class="review-box-label" id="employeeReviewLabel">{{ $todayReview->verification_status === 'suspicious' ? 'Suspicious Attendance' : 'Attendance In Review' }}</span>
             <strong id="employeeReviewMessage">{{ $todayReview->verification_status === 'suspicious' ? 'You did not reach the office area within the allowed time.' : 'Reach the office area before the timer ends.' }}</strong>
             <small id="employeeReviewDistance">Office area: {{ $todayReview->officeArea->name ?? 'Assigned office' }} @if($todayReview->latest_distance_meters) | Distance: {{ round($todayReview->latest_distance_meters) }} m @endif</small>
         </div>
-        <div class="review-box-clock" id="employeeReviewClock">{{ $todayReview->verification_status === 'suspicious' ? 'FLAGGED' : '--:--' }}</div>
+        <div class="review-box-clock" id="employeeReviewClock">--:--</div>
     </div>
     @endif
     @endif
@@ -432,13 +435,29 @@ document.addEventListener('DOMContentLoaded', function () {
     const reviewBox = document.getElementById('employeeReviewTimer');
     const reviewClock = document.getElementById('employeeReviewClock');
     let reviewStatus = reviewBox?.dataset.status;
-    let reviewDeadline = reviewBox?.dataset.deadline ? new Date(reviewBox.dataset.deadline).getTime() : 0;
+    let reviewRemaining = Number(reviewBox?.dataset.remainingSeconds || 0);
+    let reviewOverdue = Number(reviewBox?.dataset.overdueSeconds || 0);
+    let reviewArrived = reviewBox?.dataset.arrived === '1';
+    let reviewArrivalDelay = Number(reviewBox?.dataset.arrivalDelaySeconds || 0);
     let reviewRequestRunning = false;
     let lastLocationSentAt = 0;
 
     function formatReviewTime(totalSeconds) {
-        const seconds = Math.max(0, totalSeconds);
-        return String(Math.floor(seconds / 60)).padStart(2, '0') + ':' + String(seconds % 60).padStart(2, '0');
+        const seconds = Math.max(0, Math.floor(totalSeconds));
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const value = String(minutes).padStart(2, '0') + ':' + String(seconds % 60).padStart(2, '0');
+        return hours ? String(hours).padStart(2, '0') + ':' + value : value;
+    }
+
+    function paintReviewClock() {
+        if (reviewArrived && reviewStatus === 'suspicious') {
+            reviewClock.textContent = 'Reached ' + formatReviewTime(reviewArrivalDelay) + ' late';
+        } else if (reviewStatus === 'suspicious') {
+            reviewClock.textContent = 'Late ' + formatReviewTime(reviewOverdue);
+        } else {
+            reviewClock.textContent = formatReviewTime(reviewRemaining);
+        }
     }
 
     function setReviewState(status, data = {}) {
@@ -453,7 +472,13 @@ document.addEventListener('DOMContentLoaded', function () {
             reviewBox.classList.add('is-suspicious');
             document.getElementById('employeeReviewLabel').textContent = 'Suspicious Attendance';
             document.getElementById('employeeReviewMessage').textContent = 'You did not reach the office area within the allowed time.';
-            reviewClock.textContent = 'FLAGGED';
+            reviewOverdue = Number(data.overdue_seconds ?? reviewOverdue);
+            if (data.arrived_at) {
+                reviewArrived = true;
+                reviewArrivalDelay = Number(data.arrival_delay_seconds || 0);
+                document.getElementById('employeeReviewMessage').textContent = 'Your office arrival time has been recorded for admin review.';
+            }
+            paintReviewClock();
         }
         if (data.distance_meters !== undefined && data.distance_meters !== null) {
             document.getElementById('employeeReviewDistance').textContent = 'Current distance from office: ' + Math.round(data.distance_meters) + ' m';
@@ -461,7 +486,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     async function sendReviewLocation(coords = null) {
-        if (reviewRequestRunning || !reviewBox || reviewStatus !== 'in_review') return;
+        if (reviewRequestRunning || !reviewBox || !['in_review', 'suspicious'].includes(reviewStatus) || reviewArrived) return;
         reviewRequestRunning = true;
         try {
             const body = coords ? {latitude: coords.latitude, longitude: coords.longitude} : {};
@@ -477,7 +502,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    if (reviewStatus === 'in_review' && navigator.geolocation) {
+    if (['in_review', 'suspicious'].includes(reviewStatus) && !reviewArrived && navigator.geolocation) {
         navigator.geolocation.watchPosition(position => {
             const now = Date.now();
             if (now - lastLocationSentAt >= 10000) {
@@ -488,11 +513,16 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     setInterval(() => {
-        if (!reviewBox || reviewStatus !== 'in_review') return;
-        const remaining = Math.max(0, Math.ceil((reviewDeadline - Date.now()) / 1000));
-        reviewClock.textContent = formatReviewTime(remaining);
-        if (remaining === 0) sendReviewLocation();
+        if (!reviewBox || reviewArrived) return;
+        if (reviewStatus === 'in_review') {
+            reviewRemaining = Math.max(0, reviewRemaining - 1);
+            if (reviewRemaining === 0) sendReviewLocation();
+        } else if (reviewStatus === 'suspicious') {
+            reviewOverdue++;
+        }
+        paintReviewClock();
     }, 1000);
+    paintReviewClock();
     @endif
 
     /* ══════════════════════════════════════════

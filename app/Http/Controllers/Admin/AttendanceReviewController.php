@@ -36,6 +36,7 @@ class AttendanceReviewController extends Controller
                 'radius' => $item->officeArea->radius_meters ?? null,
                 'deadline' => $item->review_deadline_at,
                 'entered_at' => $item->entered_office_area_at,
+                'arrival_delay_seconds' => $item->arrival_delay_seconds,
                 'latest_distance' => $item->latest_distance_meters,
                 'reason' => $item->review_note,
             ]);
@@ -47,8 +48,15 @@ class AttendanceReviewController extends Controller
     {
         $data = $request->validate([
             'status' => 'required|in:approve,reject,suspicious',
-            'review_note' => 'nullable|string|max:1000',
+            'review_note' => 'required_if:status,approve|nullable|string|max:1000',
         ]);
+
+        if ($data['status'] === 'approve' && $attendanceDetail->verification_status !== 'suspicious') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Attendance can only be approved after the review timer expires and it becomes suspicious.',
+            ], 422);
+        }
 
         $finalStatus = $data['status'];
         $verificationStatus = $data['status'];
@@ -67,7 +75,7 @@ class AttendanceReviewController extends Controller
             'status' => $finalStatus,
             'verified_attendance_status' => $finalStatus,
             'verification_status' => $verificationStatus,
-            'review_note' => $data['review_note'] ?? $attendanceDetail->review_note,
+            'review_note' => isset($data['review_note']) ? trim($data['review_note']) : $attendanceDetail->review_note,
             'changed_by' => auth()->id(),
         ]);
 

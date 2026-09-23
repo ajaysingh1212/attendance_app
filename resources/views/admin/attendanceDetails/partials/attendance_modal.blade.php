@@ -413,6 +413,12 @@
                 <span class="val">{{ $attendanceDetail->note }}</span>
             </div>
             @endif
+            @if($attendanceDetail->verification_status === 'approved' && $attendanceDetail->review_note)
+            <div class="atm-row">
+                <span class="lbl">Late Reason</span>
+                <span class="val">{{ $attendanceDetail->review_note }}</span>
+            </div>
+            @endif
 
             @if($attendanceDetail->punch_in_image || $attendanceDetail->punch_out_image)
             <div class="atm-row" style="flex-direction:column; align-items:flex-start;">

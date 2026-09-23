@@ -72,6 +72,7 @@ class AttendanceDetail extends Model implements HasMedia
         'review_started_at',
         'review_deadline_at',
         'entered_office_area_at',
+        'arrival_delay_seconds',
         'latest_latitude',
         'latest_longitude',
         'punch_distance_meters',

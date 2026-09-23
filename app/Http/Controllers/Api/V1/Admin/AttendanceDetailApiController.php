@@ -398,41 +398,14 @@ class AttendanceDetailApiController extends Controller
         $attendance = AttendanceDetail::where('user_id', $data['user_id'])
             ->where('date', now()->toDateString())->latest()->firstOrFail();
 
-        if ($attendance->verification_status !== 'in_review') {
-            return response()->json(['success' => true, 'status' => $attendance->verification_status ?? 'approved']);
-        }
+        $state = app(\App\Services\AttendanceLocationReviewService::class)->update(
+            $attendance,
+            $employee,
+            (float) $data['latitude'],
+            (float) $data['longitude'],
+        );
 
-        if ($attendance->review_deadline_at && now()->greaterThanOrEqualTo($attendance->review_deadline_at)) {
-            $attendance->update(['status' => 'suspicious', 'verification_status' => 'suspicious']);
-            return response()->json(['success' => true, 'status' => 'suspicious', 'remaining_seconds' => 0]);
-        }
-
-        $match = app(OfficeAreaService::class)->locate($employee, (float) $data['latitude'], (float) $data['longitude']);
-        $updates = [
-            'latest_latitude' => $data['latitude'],
-            'latest_longitude' => $data['longitude'],
-            'latest_distance_meters' => $match['distance'],
-        ];
-        if ($match['inside']) {
-            $calculatedStatus = app(AttendanceStatusService::class)->forPunchIn($employee, $attendance->punch_in_time);
-            $updates += [
-                'office_area_id' => $match['area']->id,
-                'status' => $calculatedStatus,
-                'verified_attendance_status' => $calculatedStatus,
-                'verification_status' => 'approved',
-                'entered_office_area_at' => now(),
-                'review_note' => 'Employee entered the office area before the review timer expired.',
-            ];
-        }
-        $attendance->update($updates);
-
-        return response()->json([
-            'success' => true,
-            'status' => $attendance->fresh()->verification_status,
-            'inside_office_area' => $match['inside'],
-            'distance_meters' => $match['distance'],
-            'remaining_seconds' => max(0, now()->diffInSeconds($attendance->review_deadline_at, false)),
-        ]);
+        return response()->json(['success' => true] + $state);
     }
     
     
