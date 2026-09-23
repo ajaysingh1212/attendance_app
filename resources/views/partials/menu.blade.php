@@ -295,7 +295,7 @@
                 </ul>
             </li>
         @endcan
-       @can('attendance_access')
+       @if(auth()->user()->can('attendance_access') || auth()->user()->employee)
     <li class="c-sidebar-nav-dropdown {{ request()->is('admin/attendance-details*') ? 'c-show' : '' }}">
         <a class="c-sidebar-nav-dropdown-toggle" href="#">
             <i class="fa-fw fas fa-user-clock c-sidebar-nav-icon"></i>
@@ -303,7 +303,7 @@
         </a>
 
         <ul class="c-sidebar-nav-dropdown-items">
-            @can('attendance_detail_access')
+            @if(auth()->user()->can('attendance_detail_access') || auth()->user()->employee)
                 <li class="c-sidebar-nav-item">
                     <a href="{{ route('admin.attendance-details.index') }}"
                        class="c-sidebar-nav-link {{ request()->is('admin/attendance-details') || request()->is('admin/attendance-details/*') ? 'c-active' : '' }}">
@@ -311,10 +311,10 @@
                         {{ trans('cruds.attendanceDetail.title') }}
                     </a>
                 </li>
-            @endcan
+            @endif
         </ul>
     </li>
-@endcan
+@endif
         @can('customer_access')
             <li class="c-sidebar-nav-dropdown {{ request()->is("admin/make-customers*") ? "c-show" : "" }}">
                 <a class="c-sidebar-nav-dropdown-toggle" href="#">

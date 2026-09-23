@@ -37,11 +37,17 @@ class AttendanceDetailApiController extends Controller
     {
         abort_if(Gate::denies('attendance_detail_access'), Response::HTTP_FORBIDDEN, '403 Forbidden');
 
-        return new AttendanceDetailResource(AttendanceDetail::with(['user'])->get());
+        $query = AttendanceDetail::with(['user']);
+        if (!auth()->user()->is_admin) {
+            $query->where('user_id', auth()->id());
+        }
+
+        return AttendanceDetailResource::collection($query->get());
     }
 
     public function store(StoreAttendanceDetailRequest $request)
     {
+        abort_unless(auth()->user()->is_admin, Response::HTTP_FORBIDDEN, 'Only admins can manually create attendance.');
         $attendanceDetail = AttendanceDetail::create($request->all());
 
         if ($request->input('punch_in_image', false)) {
@@ -60,12 +66,14 @@ class AttendanceDetailApiController extends Controller
     public function show(AttendanceDetail $attendanceDetail)
     {
         abort_if(Gate::denies('attendance_detail_show'), Response::HTTP_FORBIDDEN, '403 Forbidden');
+        abort_if(!auth()->user()->is_admin && $attendanceDetail->user_id !== auth()->id(), Response::HTTP_FORBIDDEN, 'Unauthorized access.');
 
         return new AttendanceDetailResource($attendanceDetail->load(['user']));
     }
 
     public function update(UpdateAttendanceDetailRequest $request, AttendanceDetail $attendanceDetail)
     {
+        abort_unless(auth()->user()->is_admin, Response::HTTP_FORBIDDEN, 'Only admins can edit attendance.');
         $attendanceDetail->update($request->all());
 
         if ($request->input('punch_in_image', false)) {
@@ -97,6 +105,7 @@ class AttendanceDetailApiController extends Controller
 
     public function destroy(AttendanceDetail $attendanceDetail)
     {
+        abort_unless(auth()->user()->is_admin, Response::HTTP_FORBIDDEN, 'Only admins can delete attendance.');
         abort_if(Gate::denies('attendance_detail_delete'), Response::HTTP_FORBIDDEN, '403 Forbidden');
 
         $attendanceDetail->delete();
@@ -108,11 +117,15 @@ class AttendanceDetailApiController extends Controller
     {
         $request->validate([
             'user_id'    => 'required|exists:users,id',
-            'latitude'   => 'nullable|string',
-            'longitude'  => 'nullable|string',
+            'latitude'   => 'required|numeric|between:-90,90',
+            'longitude'  => 'required|numeric|between:-180,180',
             'location'   => 'nullable|string',
-            'punch_image'=> 'nullable|file|image',
+            'punch_image'=> 'required|file|image|max:10240',
         ]);
+
+        if ((int) auth()->id() !== (int) $request->user_id && !auth()->user()?->is_admin) {
+            return response()->json(['success' => false, 'message' => 'You can only mark your own attendance.'], 403);
+        }
     
         try {
             $user = User::find($request->user_id);
@@ -362,6 +375,9 @@ class AttendanceDetailApiController extends Controller
             'latitude' => 'required|numeric|between:-90,90',
             'longitude' => 'required|numeric|between:-180,180',
         ]);
+        if ((int) auth()->id() !== (int) $data['user_id'] && !auth()->user()?->is_admin) {
+            return response()->json(['success' => false, 'message' => 'You can only update your own location.'], 403);
+        }
         $employee = \App\Models\Employee::where('user_id', $data['user_id'])->firstOrFail();
         $attendance = AttendanceDetail::where('user_id', $data['user_id'])
             ->where('date', now()->toDateString())->latest()->firstOrFail();

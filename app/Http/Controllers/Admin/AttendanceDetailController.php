@@ -16,6 +16,7 @@ use App\Models\Holiday;
 use App\Models\LeaveRequest;
 use App\Models\User;
 use App\Services\PayrollCalculator;
+use App\Services\OfficeAreaService;
 use Carbon\Carbon;
 use Gate;
 use Illuminate\Http\Request;
@@ -35,7 +36,11 @@ class AttendanceDetailController extends Controller
     */
     public function index(Request $request)
     {
-        abort_if(Gate::denies('attendance_detail_access'), Response::HTTP_FORBIDDEN, '403 Forbidden');
+        abort_if(
+            Gate::denies('attendance_detail_access') && !auth()->user()->employee()->exists(),
+            Response::HTTP_FORBIDDEN,
+            '403 Forbidden'
+        );
 
         $users = auth()->user()->is_admin
             ? User::whereHas('employee')->orderBy('name')->get()
@@ -210,8 +215,12 @@ class AttendanceDetailController extends Controller
     */
     public function fetchDetail(Request $request)
     {
-        $userId = $request->get('user_id');
+        $userId = (int) $request->get('user_id');
         $date   = $request->get('date');
+
+        if (!auth()->user()->is_admin && auth()->id() !== $userId) {
+            abort(403, 'Unauthorized access.');
+        }
 
         $attendanceDetail = AttendanceDetail::where('user_id', $userId)
             ->whereDate('date', $date)
@@ -257,7 +266,11 @@ class AttendanceDetailController extends Controller
     */
     public function create()
     {
-        abort_if(Gate::denies('attendance_detail_create'), Response::HTTP_FORBIDDEN, '403 Forbidden');
+        abort_if(
+            Gate::denies('attendance_detail_create') && !auth()->user()->employee()->exists(),
+            Response::HTTP_FORBIDDEN,
+            '403 Forbidden'
+        );
 
         $authUser = auth()->user();
         $isAdmin  = $authUser->roles->contains('title', 'Admin');
@@ -287,9 +300,38 @@ class AttendanceDetailController extends Controller
     */
     public function store(StoreAttendanceDetailRequest $request)
     {
-        $userId   = $request->input('user_id');
+        $isAdmin = (bool) auth()->user()->is_admin;
+        $userId = $isAdmin ? (int) $request->input('user_id') : (int) auth()->id();
+
+        if (!$isAdmin) {
+            $imageField = $request->filled('punch_out_time') ? 'punch_out_image' : 'punch_in_image';
+            $coordinatePrefix = $request->filled('punch_out_time') ? 'punch_out' : 'punch_in';
+            $request->validate([
+                $coordinatePrefix . '_latitude' => 'required|numeric|between:-90,90',
+                $coordinatePrefix . '_longitude' => 'required|numeric|between:-180,180',
+                $coordinatePrefix . '_location' => 'required|string|max:500',
+                $imageField => 'required|image|max:10240',
+            ], [
+                $imageField . '.required' => 'A live selfie is required to mark attendance.',
+                $coordinatePrefix . '_latitude.required' => 'Live location is required to mark attendance.',
+            ]);
+        }
+
         $employee = Employee::where('user_id', $userId)->firstOrFail();
         $branch   = Branch::find($employee->branch_id);
+
+        $existingAttendance = AttendanceDetail::where('user_id', $userId)
+            ->where('date', now()->toDateString())
+            ->first();
+
+        if (!$isAdmin && $request->filled('punch_in_time') && $existingAttendance?->punch_in_time) {
+            return back()->withErrors(['attendance' => 'Today\'s punch-in is already recorded.']);
+        }
+        if (!$isAdmin && $request->filled('punch_out_time') && (!$existingAttendance?->punch_in_time || $existingAttendance?->punch_out_time)) {
+            return back()->withErrors(['attendance' => $existingAttendance?->punch_out_time
+                ? 'Today\'s attendance is already completed.'
+                : 'Punch-in is required before punch-out.']);
+        }
 
         if ($branch && strtolower($branch->name) !== 'anywhere') {
             $allowedRadius = $employee->attendance_radius_meter ?? 0;
@@ -324,6 +366,30 @@ class AttendanceDetailController extends Controller
                 'punch_in_time', 'punch_in_latitude', 'punch_in_longitude', 'punch_in_location',
             ]));
             $attendance->status = $request->input('status');
+            if (!$isAdmin) {
+                $isAnywhere = strtolower(trim((string) $employee->branch_id)) === 'anywhere'
+                    || strtolower(trim((string) $employee->attendance_source)) === 'anywhere';
+                $match = $isAnywhere ? null : app(OfficeAreaService::class)->locate(
+                    $employee,
+                    (float) $request->punch_in_latitude,
+                    (float) $request->punch_in_longitude
+                );
+                $normalStatus = $attendance->status ?: 'present';
+                if ($match && $match['area']) {
+                    $attendance->office_area_id = $match['area']->id;
+                    $attendance->verified_attendance_status = $normalStatus;
+                    $attendance->verification_status = $match['inside'] ? 'approved' : 'in_review';
+                    $attendance->status = $match['inside'] ? $normalStatus : 'in_review';
+                    $attendance->review_started_at = $match['inside'] ? null : now();
+                    $attendance->review_deadline_at = $match['inside'] ? null : now()->addMinutes($match['area']->review_minutes);
+                    $attendance->entered_office_area_at = $match['inside'] ? now() : null;
+                    $attendance->punch_distance_meters = $match['distance'];
+                    $attendance->latest_distance_meters = $match['distance'];
+                    $attendance->latest_latitude = $request->punch_in_latitude;
+                    $attendance->latest_longitude = $request->punch_in_longitude;
+                    $attendance->review_note = $match['inside'] ? null : 'Punch-in was outside the configured office area.';
+                }
+            }
             if ($request->hasFile('punch_in_image')) {
                 $attendance->addMedia($request->file('punch_in_image'))->toMediaCollection('punch_in_image');
             }
@@ -358,6 +424,7 @@ class AttendanceDetailController extends Controller
     */
     public function edit(AttendanceDetail $attendanceDetail)
     {
+        abort_unless(auth()->user()->is_admin, Response::HTTP_FORBIDDEN, 'Only admins can edit attendance.');
         abort_if(Gate::denies('attendance_detail_edit'), Response::HTTP_FORBIDDEN, '403 Forbidden');
         $users = User::pluck('name', 'id')->prepend(trans('global.pleaseSelect'), '');
         $attendanceDetail->load('user');
@@ -371,6 +438,7 @@ class AttendanceDetailController extends Controller
     */
     public function update(UpdateAttendanceDetailRequest $request, AttendanceDetail $attendanceDetail)
     {
+        abort_unless(auth()->user()->is_admin, Response::HTTP_FORBIDDEN, 'Only admins can edit attendance.');
         $attendanceDetail->update($request->all());
 
         if ($request->input('punch_in_image')) {
@@ -396,6 +464,11 @@ class AttendanceDetailController extends Controller
     public function show(AttendanceDetail $attendanceDetail)
     {
         abort_if(Gate::denies('attendance_detail_show'), Response::HTTP_FORBIDDEN, '403 Forbidden');
+        abort_if(
+            !auth()->user()->is_admin && $attendanceDetail->user_id !== auth()->id(),
+            Response::HTTP_FORBIDDEN,
+            'Unauthorized access.'
+        );
         $attendanceDetail->load('user');
         return view('admin.attendanceDetails.show', compact('attendanceDetail'));
     }
@@ -407,6 +480,7 @@ class AttendanceDetailController extends Controller
     */
     public function destroy(AttendanceDetail $attendanceDetail)
     {
+        abort_unless(auth()->user()->is_admin, Response::HTTP_FORBIDDEN, 'Only admins can delete attendance.');
         abort_if(Gate::denies('attendance_detail_delete'), Response::HTTP_FORBIDDEN, '403 Forbidden');
         $attendanceDetail->delete();
         return back();
@@ -414,6 +488,7 @@ class AttendanceDetailController extends Controller
 
     public function massDestroy(MassDestroyAttendanceDetailRequest $request)
     {
+        abort_unless(auth()->user()->is_admin, Response::HTTP_FORBIDDEN, 'Only admins can delete attendance.');
         AttendanceDetail::whereIn('id', request('ids'))->delete();
         return response(null, Response::HTTP_NO_CONTENT);
     }
@@ -425,6 +500,7 @@ class AttendanceDetailController extends Controller
     */
     public function updateStatus(Request $request)
     {
+        abort_unless(auth()->user()->is_admin, Response::HTTP_FORBIDDEN, 'Only admins can update attendance.');
         try {
             // ── 1. Validate ────────────────────────────────────────────────
             try {

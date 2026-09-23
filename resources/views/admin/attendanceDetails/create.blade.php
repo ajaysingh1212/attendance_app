@@ -142,7 +142,8 @@
 
                     <div class="form-group">
                         <label>Punch In Image</label>
-                        <input type="file" name="punch_in_image" class="form-control">
+                        <input type="file" name="punch_in_image" class="form-control" accept="image/*" capture="user" required>
+                        <small class="text-muted">Take a live front-camera selfie.</small>
                     </div>
 
                     <div class="form-group">
@@ -173,7 +174,8 @@
 
                     <div class="form-group">
                         <label>Punch Out Image</label>
-                        <input type="file" name="punch_out_image" class="form-control">
+                        <input type="file" name="punch_out_image" class="form-control" accept="image/*" capture="user" required>
+                        <small class="text-muted">Take a live front-camera selfie.</small>
                     </div>
 
                     <div class="form-group">

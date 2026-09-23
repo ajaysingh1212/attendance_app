@@ -174,6 +174,17 @@
 
 @section('content')
 <div class="container-fluid py-2 attendance-page">
+    @if(!auth()->user()->is_admin)
+    <div class="d-flex justify-content-between align-items-center mb-3 p-3 bg-white border rounded">
+        <div>
+            <strong>My Attendance</strong>
+            <div class="text-muted small">Live location and selfie are required for punch-in and punch-out.</div>
+        </div>
+        <a class="btn btn-success" href="{{ route('admin.attendance-details.create') }}">
+            <i class="fas fa-camera mr-1"></i> Mark Attendance
+        </a>
+    </div>
+    @endif
     {{-- <h2 class="attendance-title text-center fw-bold">📅 Attendance Calendar</h2> --}}
 
     {{-- Action buttons --}}

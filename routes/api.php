@@ -77,8 +77,8 @@ Route::group(['prefix' => 'v1', 'as' => 'api.', 'namespace' => 'Api\V1\Admin'], 
     Route::get('leave-requests-by-user/{userId}', 'LeaveRequestApiController@getLeaveRequestsByUser')->name('leave-request.by-user');
     
     // ⏰ Attendance Punch In/Out
-    Route::post('attendance/punch', 'AttendanceDetailApiController@punchAttendance')->name('attendance.punch');
-    Route::post('attendance/location', 'AttendanceDetailApiController@updateLiveLocation')->name('attendance.location');
+    Route::post('attendance/punch', 'AttendanceDetailApiController@punchAttendance')->middleware('auth:sanctum')->name('attendance.punch');
+    Route::post('attendance/location', 'AttendanceDetailApiController@updateLiveLocation')->middleware('auth:sanctum')->name('attendance.location');
     
     // 📅 Today Attendance by User
     Route::get('attendance/today/{userId}', 'AttendanceDetailApiController@todayAttendance')->name('attendance.today');
@@ -176,6 +176,5 @@ Route::group(['prefix' => 'v1', 'as' => 'api.', 'namespace' => 'Api\V1\Admin'], 
     Route::post('task-groups/tasks/{taskId}/complete','GroupTaskActionApiController@complete')->name('task-groups.tasks.complete');
     
 });
-
 
 

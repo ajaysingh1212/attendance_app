@@ -11,7 +11,13 @@ class StoreAttendanceDetailRequest extends FormRequest
 {
     public function authorize()
     {
-        return Gate::allows('attendance_detail_create');
+        $user = $this->user();
+
+        return $user && (
+            $user->is_admin
+            || $user->employee()->exists()
+            || Gate::allows('attendance_detail_create')
+        );
     }
 
     public function rules()
