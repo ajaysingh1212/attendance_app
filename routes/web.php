@@ -77,6 +77,7 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.', 'namespace' => 'Admin', 'mi
 
     // Attendance Detail
     Route::post('attendance-details/update-status', [AttendanceDetailController::class, 'updateStatus'])->name('attendance-details.updateStatus');
+    Route::post('attendance-details/live-location', [AttendanceDetailController::class, 'updateOwnLiveLocation'])->name('attendance-details.liveLocation');
 
 
     // ⛳️ CSV, Media, and Custom Routes

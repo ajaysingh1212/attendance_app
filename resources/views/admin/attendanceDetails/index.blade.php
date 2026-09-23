@@ -169,6 +169,7 @@
 .attendance-page .summary-box .counter {
     font-size: 23px;
 }
+.employee-review-box{display:grid;grid-template-columns:48px 1fr auto;align-items:center;gap:14px;background:#fff7ed;border:1px solid #fdba74;border-left:5px solid #f59e0b;border-radius:8px;padding:14px 16px;margin-bottom:16px}.review-box-icon{width:44px;height:44px;display:grid;place-items:center;background:#ffedd5;color:#c2410c;border-radius:50%;font-size:20px}.review-box-copy{display:flex;flex-direction:column;gap:2px}.review-box-label{font-size:11px;font-weight:800;color:#9a3412;text-transform:uppercase}.review-box-copy strong{color:#431407}.review-box-copy small{color:#78716c}.review-box-clock{font:800 28px monospace;color:#c2410c;min-width:92px;text-align:right}.employee-review-box.is-suspicious{background:#fef2f2;border-color:#fca5a5;border-left-color:#dc2626}.employee-review-box.is-suspicious .review-box-icon{background:#fee2e2;color:#b91c1c}.employee-review-box.is-suspicious .review-box-label,.employee-review-box.is-suspicious .review-box-clock{color:#b91c1c}@media(max-width:600px){.employee-review-box{grid-template-columns:42px 1fr}.review-box-clock{grid-column:1/-1;text-align:center;border-top:1px solid rgba(0,0,0,.08);padding-top:8px;width:100%}}
 </style>
 @endsection
 
@@ -184,6 +185,19 @@
             <i class="fas fa-camera mr-1"></i> Mark Attendance
         </a>
     </div>
+    @if($todayReview)
+    <div id="employeeReviewTimer" class="employee-review-box {{ $todayReview->verification_status === 'suspicious' ? 'is-suspicious' : '' }}"
+         data-status="{{ $todayReview->verification_status }}"
+         data-deadline="{{ optional($todayReview->review_deadline_at)->toIso8601String() }}">
+        <div class="review-box-icon"><i class="fas fa-map-marker-alt"></i></div>
+        <div class="review-box-copy">
+            <span class="review-box-label" id="employeeReviewLabel">{{ $todayReview->verification_status === 'suspicious' ? 'Suspicious Attendance' : 'Attendance In Review' }}</span>
+            <strong id="employeeReviewMessage">{{ $todayReview->verification_status === 'suspicious' ? 'You did not reach the office area within the allowed time.' : 'Reach the office area before the timer ends.' }}</strong>
+            <small id="employeeReviewDistance">Office area: {{ $todayReview->officeArea->name ?? 'Assigned office' }} @if($todayReview->latest_distance_meters) | Distance: {{ round($todayReview->latest_distance_meters) }} m @endif</small>
+        </div>
+        <div class="review-box-clock" id="employeeReviewClock">{{ $todayReview->verification_status === 'suspicious' ? 'FLAGGED' : '--:--' }}</div>
+    </div>
+    @endif
     @endif
     {{-- <h2 class="attendance-title text-center fw-bold">📅 Attendance Calendar</h2> --}}
 
@@ -413,6 +427,73 @@ document.addEventListener('DOMContentLoaded', function () {
             window._atmUpdateLocChip(loc);
         }
     });
+
+    @if(!auth()->user()->is_admin && $todayReview)
+    const reviewBox = document.getElementById('employeeReviewTimer');
+    const reviewClock = document.getElementById('employeeReviewClock');
+    let reviewStatus = reviewBox?.dataset.status;
+    let reviewDeadline = reviewBox?.dataset.deadline ? new Date(reviewBox.dataset.deadline).getTime() : 0;
+    let reviewRequestRunning = false;
+    let lastLocationSentAt = 0;
+
+    function formatReviewTime(totalSeconds) {
+        const seconds = Math.max(0, totalSeconds);
+        return String(Math.floor(seconds / 60)).padStart(2, '0') + ':' + String(seconds % 60).padStart(2, '0');
+    }
+
+    function setReviewState(status, data = {}) {
+        reviewStatus = status;
+        if (status === 'approved') {
+            reviewBox.classList.remove('is-suspicious');
+            document.getElementById('employeeReviewLabel').textContent = 'Attendance Approved';
+            document.getElementById('employeeReviewMessage').textContent = 'You reached the office area within the allowed time.';
+            reviewClock.textContent = 'PRESENT';
+            setTimeout(() => window.location.reload(), 1200);
+        } else if (status === 'suspicious') {
+            reviewBox.classList.add('is-suspicious');
+            document.getElementById('employeeReviewLabel').textContent = 'Suspicious Attendance';
+            document.getElementById('employeeReviewMessage').textContent = 'You did not reach the office area within the allowed time.';
+            reviewClock.textContent = 'FLAGGED';
+        }
+        if (data.distance_meters !== undefined && data.distance_meters !== null) {
+            document.getElementById('employeeReviewDistance').textContent = 'Current distance from office: ' + Math.round(data.distance_meters) + ' m';
+        }
+    }
+
+    async function sendReviewLocation(coords = null) {
+        if (reviewRequestRunning || !reviewBox || reviewStatus !== 'in_review') return;
+        reviewRequestRunning = true;
+        try {
+            const body = coords ? {latitude: coords.latitude, longitude: coords.longitude} : {};
+            const response = await fetch('{{ route('admin.attendance-details.liveLocation') }}', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':'{{ csrf_token() }}'},
+                body: JSON.stringify(body)
+            });
+            const data = await response.json();
+            if (response.ok) setReviewState(data.status, data);
+        } finally {
+            reviewRequestRunning = false;
+        }
+    }
+
+    if (reviewStatus === 'in_review' && navigator.geolocation) {
+        navigator.geolocation.watchPosition(position => {
+            const now = Date.now();
+            if (now - lastLocationSentAt >= 10000) {
+                lastLocationSentAt = now;
+                sendReviewLocation(position.coords);
+            }
+        }, () => {}, {enableHighAccuracy:true, maximumAge:5000, timeout:15000});
+    }
+
+    setInterval(() => {
+        if (!reviewBox || reviewStatus !== 'in_review') return;
+        const remaining = Math.max(0, Math.ceil((reviewDeadline - Date.now()) / 1000));
+        reviewClock.textContent = formatReviewTime(remaining);
+        if (remaining === 0) sendReviewLocation();
+    }, 1000);
+    @endif
 
     /* ══════════════════════════════════════════
        FULLCALENDAR

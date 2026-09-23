@@ -17,7 +17,7 @@
             <form method="POST" action="{{ route('admin.office-areas.store') }}" id="areaForm">
                 @csrf
                 <div class="form-group"><label>Area name</label><input class="form-control" name="name" required placeholder="Main office radius"></div>
-                <div class="form-group"><label>Office</label><select class="form-control" name="office_branch_id"><option value="">All offices</option>@foreach($branches as $branch)<option value="{{ $branch->id }}">{{ $branch->branch_name }}</option>@endforeach</select></div>
+                <div class="form-group"><label>Office</label><select class="form-control" name="office_branch_id" id="officeBranchSelect"><option value="">Select office or use live location</option>@foreach($branches as $branch)<option value="{{ $branch->id }}" data-latitude="{{ $branch->latitude }}" data-longitude="{{ $branch->longitude }}">{{ $branch->branch_name }}</option>@endforeach</select></div>
                 <div class="form-row"><div class="form-group col-6"><label>Latitude</label><input class="form-control" id="latitude" name="latitude" required readonly></div><div class="form-group col-6"><label>Longitude</label><input class="form-control" id="longitude" name="longitude" required readonly></div></div>
                 <div class="form-row"><div class="form-group col-6"><label>Radius (meters)</label><input type="number" class="form-control" id="radius" name="radius_meters" value="100" min="1" required></div><div class="form-group col-6"><label>Review time (minutes)</label><input type="number" class="form-control" name="review_minutes" value="10" min="1" required></div></div>
                 <div class="form-row align-items-end"><div class="form-group col-6"><label>Circle color</label><input type="color" class="form-control" id="color" name="color" value="#2563eb"></div><div class="form-group col-6"><label><input type="checkbox" name="is_active" value="1" checked> Active</label></div></div>
@@ -59,13 +59,15 @@ function initOfficeAreaMap(){
     areaMap=new google.maps.Map(document.getElementById('officeAreaMap'),{center,zoom:17,mapTypeControl:false,streetViewControl:false});
     savedAreas.forEach(a=>{const p={lat:Number(a.latitude),lng:Number(a.longitude)};new google.maps.Marker({map:areaMap,position:p,title:a.name});new google.maps.Circle({map:areaMap,center:p,radius:Number(a.radius_meters),strokeColor:a.color,strokeOpacity:.9,strokeWeight:2,fillColor:a.color,fillOpacity:.15});});
     areaMap.addListener('click',e=>setDraft(e.latLng.lat(),e.latLng.lng()));
-    document.getElementById('radius').addEventListener('input',e=>draftCircle&&draftCircle.setRadius(Number(e.target.value)||1));
+    document.getElementById('radius').addEventListener('input',e=>{if(draftCircle){draftCircle.setRadius(Number(e.target.value)||1);fitDraftCircle();}});
+    document.getElementById('officeBranchSelect').addEventListener('change',function(){const option=this.options[this.selectedIndex];const lat=Number(option.dataset.latitude);const lng=Number(option.dataset.longitude);if(!option.value)return;if(!Number.isFinite(lat)||!Number.isFinite(lng)||(!lat&&!lng)){alert('Selected office does not have a saved map location. Please update its latitude and longitude first.');return}setDraft(lat,lng);areaMap.setCenter({lat,lng});fitDraftCircle();});
     document.getElementById('color').addEventListener('input',e=>draftCircle&&draftCircle.setOptions({strokeColor:e.target.value,fillColor:e.target.value}));
     document.getElementById('liveLocation').addEventListener('click',()=>requestLiveLocation(true));
     requestLiveLocation(false);
 }
 function requestLiveLocation(showError){if(!navigator.geolocation){if(showError)alert('Geolocation is not supported in this browser.');return}navigator.geolocation.getCurrentPosition(p=>{setDraft(p.coords.latitude,p.coords.longitude);areaMap.setCenter({lat:p.coords.latitude,lng:p.coords.longitude});},()=>{if(showError)alert('Live location permission is required.');},{enableHighAccuracy:true,timeout:10000,maximumAge:0});}
 function setDraft(lat,lng){document.getElementById('latitude').value=lat.toFixed(7);document.getElementById('longitude').value=lng.toFixed(7);const p={lat,lng};if(!draftMarker){draftMarker=new google.maps.Marker({map:areaMap,position:p,draggable:true});draftMarker.addListener('dragend',e=>setDraft(e.latLng.lat(),e.latLng.lng()));draftCircle=new google.maps.Circle({map:areaMap,center:p,radius:Number(document.getElementById('radius').value),strokeWeight:2,fillOpacity:.18});}else{draftMarker.setPosition(p);draftCircle.setCenter(p)}draftCircle.setOptions({strokeColor:document.getElementById('color').value,fillColor:document.getElementById('color').value});}
+function fitDraftCircle(){if(draftCircle)areaMap.fitBounds(draftCircle.getBounds(),40);}
 function focusArea(lat,lng,radius){areaMap.setCenter({lat:Number(lat),lng:Number(lng)});areaMap.fitBounds(new google.maps.Circle({center:{lat:Number(lat),lng:Number(lng)},radius:Number(radius)}).getBounds());}
 </script>
 <script async defer src="https://maps.googleapis.com/maps/api/js?key={{ $mapsKey }}&libraries=places&callback=initOfficeAreaMap"></script>
