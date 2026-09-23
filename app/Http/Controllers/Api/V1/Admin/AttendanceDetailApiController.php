@@ -133,28 +133,23 @@ class AttendanceDetailApiController extends Controller
                 ->first();
     
             // CASE 1: No record yet → Punch In
-            // Punch-In
             if (!$attendance) {
+            
+                // 🚫 2:30 PM ke baad Punch-In allowed nahi hai
+                $currentTime = now();
+                $cutoffTime = now()->setTime(14, 00, 0);
+            
+                if ($currentTime->gt($cutoffTime)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Attendance punch-in is not allowed after 2:00 PM.'
+                    ], 403);
+                }
+            
                 $expectedStart = \Carbon\Carbon::parse($employee->work_start_time);
                 $now = now();
                 $lateMinutes = $now->gt($expectedStart) ? $expectedStart->diffInMinutes($now) : 0;
                 $status = ($lateMinutes > $employee->delay_time) ? 'half_time' : 'present';
-                $verification = null;
-                $areaMatch = null;
-                $attendanceAnywhere = strtolower(trim((string) $employee->branch_id)) === 'anywhere'
-                    || strtolower(trim((string) $employee->attendance_source)) === 'anywhere';
-
-                if (!$attendanceAnywhere && $request->filled('latitude') && $request->filled('longitude')) {
-                    $areaMatch = app(OfficeAreaService::class)->locate(
-                        $employee,
-                        (float) $request->latitude,
-                        (float) $request->longitude
-                    );
-                    if ($areaMatch['area']) {
-                        $verification = $areaMatch['inside'] ? 'approved' : 'in_review';
-                    }
-                }
-                $attendanceStatus = $verification === 'in_review' ? 'in_review' : $status;
             
                 $attendance = AttendanceDetail::create([
                     'user_id'            => $request->user_id,
