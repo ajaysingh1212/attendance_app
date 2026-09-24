@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 use Illuminate\Support\Carbon;
+use Illuminate\Validation\Rule;
 
 use App\Mail\AdminDailyAttendanceMail;
 
@@ -105,14 +106,16 @@ class AttendanceDetailApiController extends Controller
     
     public function punchAttendance(Request $request)
     {
+        $punchTypeForValidation = strtolower((string) $request->input('punch_type', ''));
+
         $request->validate([
             'user_id'     => 'required|exists:users,id',
-            'punch_type'  => 'required|in:in,out',
+            'punch_type'  => 'required|in:in,verify,out',
             'latitude'    => 'required|numeric|between:-90,90',
             'longitude'   => 'required|numeric|between:-180,180',
             'location'    => 'nullable|string|max:500',
             'device_name' => 'nullable|string|max:255',
-            'punch_image' => 'required|file|image|max:10240',
+            'punch_image' => ['nullable', 'file', 'image', 'max:10240', Rule::requiredIf(in_array($punchTypeForValidation, ['in', 'out'], true))],
         ]);
 
         try {
@@ -137,6 +140,120 @@ class AttendanceDetailApiController extends Controller
             $requestDevice = $request->input('device_name') ?? $request->userAgent();
             $isAnywhereEmployee = strtolower(trim((string) ($employee->branch_id ?? ''))) === 'anywhere'
                 || strtolower(trim((string) ($employee->attendance_source ?? ''))) === 'anywhere';
+
+            if ($punchType === 'verify') {
+                if (! $attendance) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Punch In is required before verification.',
+                    ], 422);
+                }
+
+                if (! $attendance->punch_in_time) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Punch In is required before verification.',
+                    ], 422);
+                }
+
+                if ($attendance->verification_status === 'verified') {
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Attendance location has already been verified.',
+                        'punch_type' => 'verify',
+                        'verification_status' => 'verified',
+                        'attendance' => new AttendanceDetailResource($attendance),
+                    ], 200);
+                }
+
+                if ($attendance->verification_status === 'suspicious') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Attendance is already marked suspicious and cannot be re-verified.',
+                        'punch_type' => 'verify',
+                        'verification_status' => 'suspicious',
+                    ], 422);
+                }
+
+                if ($attendance->verification_status !== 'in_review') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Attendance is not pending location verification.',
+                        'punch_type' => 'verify',
+                        'verification_status' => $attendance->verification_status,
+                    ], 422);
+                }
+
+                if ($isAnywhereEmployee) {
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Location verification is not required for this employee.',
+                        'punch_type' => 'verify',
+                        'verification_status' => $attendance->verification_status,
+                        'attendance' => new AttendanceDetailResource($attendance),
+                    ], 200);
+                }
+
+                $officeMatch = app(\App\Services\OfficeAreaService::class)->locate(
+                    $employee,
+                    (float) $request->latitude,
+                    (float) $request->longitude
+                );
+
+                $deadline = $attendance->review_deadline_at ? \Carbon\Carbon::parse($attendance->review_deadline_at) : null;
+                $isBeforeDeadline = $deadline ? $now->lessThan($deadline) : true;
+
+                if (! $officeMatch['inside']) {
+                    if ($deadline && $now->greaterThanOrEqualTo($deadline)) {
+                        $attendance->verification_status = 'suspicious';
+                        $attendance->review_note = 'Review time has expired. You have not reached the office area.';
+                        $attendance->entered_office_area_at = null;
+                        $attendance->save();
+
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Review time has expired. You have not reached the office area.',
+                            'punch_type' => 'verify',
+                            'verification_status' => 'suspicious',
+                            'attendance' => new AttendanceDetailResource($attendance),
+                        ], 422);
+                    }
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Please reach the office area first and try again.',
+                        'punch_type' => 'verify',
+                        'verification_status' => 'in_review',
+                        'attendance' => new AttendanceDetailResource($attendance),
+                    ], 422);
+                }
+
+                $attendance->office_area_id = $attendance->office_area_id ?? ($officeMatch['area']?->id ?? $attendance->office_area_id);
+                $attendance->latest_latitude = $request->latitude;
+                $attendance->latest_longitude = $request->longitude;
+                $attendance->latest_distance_meters = $officeMatch['distance'];
+                $attendance->entered_office_area_at = $now;
+
+                if ($isBeforeDeadline) {
+                    $attendance->verification_status = 'verified';
+                    $attendance->review_note = 'Employee entered the office area and completed verification before the review deadline.';
+                } else {
+                    $attendance->verification_status = 'suspicious';
+                    $attendance->review_note = 'Employee entered the office area after the review deadline.';
+                }
+
+                $attendance->save();
+
+                return response()->json([
+                    'success' => true,
+                    'message' => $isBeforeDeadline
+                        ? 'Office location verified successfully.'
+                        : 'Office location verified after the allowed review time.',
+                    'punch_type' => 'verify',
+                    'verification_status' => $attendance->verification_status,
+                    'attendance' => new AttendanceDetailResource($attendance),
+                ], 200);
+            }
 
             if ($punchType === 'in') {
                 if ($attendance && $attendance->punch_in_time) {
