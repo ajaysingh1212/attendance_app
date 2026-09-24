@@ -19,7 +19,7 @@ class AttendanceLocationReviewService
         $deadline = $attendance->review_deadline_at;
         $expired = $deadline && $now->greaterThanOrEqualTo($deadline);
 
-        if (!in_array($attendance->verification_status, ['in_review', 'suspicious'], true)) {
+        if (!in_array($attendance->verification_status, ['in_review', 'suspicious', 'verified'], true)) {
             return $this->state($attendance);
         }
 

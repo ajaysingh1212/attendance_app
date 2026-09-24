@@ -468,7 +468,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function setReviewState(status, data = {}) {
         reviewStatus = status;
-        if (status === 'approved') {
+        if (['approved', 'verified'].includes(status)) {
             reviewBox.classList.remove('is-suspicious');
             document.getElementById('employeeReviewLabel').textContent = 'Attendance Approved';
             document.getElementById('employeeReviewMessage').textContent = 'You reached the office area within the allowed time.';

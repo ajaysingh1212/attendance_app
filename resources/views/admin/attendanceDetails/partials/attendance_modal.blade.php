@@ -413,7 +413,7 @@
                 <span class="val">{{ $attendanceDetail->note }}</span>
             </div>
             @endif
-            @if($attendanceDetail->verification_status === 'approved' && $attendanceDetail->review_note)
+            @if(in_array($attendanceDetail->verification_status, ['approved', 'verified'], true) && $attendanceDetail->review_note)
             <div class="atm-row">
                 <span class="lbl">Late Reason</span>
                 <span class="val">{{ $attendanceDetail->review_note }}</span>
