@@ -1,12 +1,43 @@
 <div id="sidebar" class="c-sidebar c-sidebar-fixed c-sidebar-lg-show">
     <style>
+        #sidebar .c-sidebar-nav-dropdown.c-show > .c-sidebar-nav-dropdown-toggle,
+        #sidebar .c-sidebar-nav-dropdown.c-show > .c-sidebar-nav-dropdown-toggle:hover {
+            background: #e8f1ff;
+            color: #1f3a5f;
+        }
+
+        #sidebar .c-sidebar-nav-dropdown.c-show > .c-sidebar-nav-dropdown-toggle .c-sidebar-nav-icon {
+            color: #4f7db8;
+        }
+
+        #sidebar .c-sidebar-nav-dropdown.c-show > .c-sidebar-nav-dropdown-items {
+            background: #eef4fc;
+        }
+
+        #sidebar .c-sidebar-nav-dropdown.c-show > .c-sidebar-nav-dropdown-items .c-sidebar-nav-link {
+            color: #334155;
+        }
+
+        #sidebar .c-sidebar-nav-dropdown.c-show > .c-sidebar-nav-dropdown-items .c-sidebar-nav-icon {
+            color: #64748b;
+        }
+
+        #sidebar .c-sidebar-nav-dropdown.c-show .c-sidebar-nav-dropdown-items .c-sidebar-nav-link:hover {
+            background: #dfeaf8;
+            color: #1f3a5f;
+        }
+
+        #sidebar .c-sidebar-nav-dropdown.c-show .c-sidebar-nav-dropdown-items .c-sidebar-nav-link:hover .c-sidebar-nav-icon {
+            color: #3b6ea8;
+        }
+
         #sidebar .c-sidebar-nav-dropdown-items .c-sidebar-nav-link.c-active {
-            background: #2563eb;
-            color: #fff;
-            border-left: 4px solid #fbbf24;
+            background: #dbeafe;
+            color: #1e3a8a;
+            border-left: 4px solid #60a5fa;
         }
         #sidebar .c-sidebar-nav-dropdown-items .c-sidebar-nav-link.c-active .c-sidebar-nav-icon {
-            color: #fff;
+            color: #2563eb;
         }
     </style>
 
