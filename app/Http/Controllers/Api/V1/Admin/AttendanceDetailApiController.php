@@ -273,14 +273,6 @@ class AttendanceDetailApiController extends Controller
                     ], 422);
                 }
 
-                $cutoffTime = $now->copy()->setTime(18, 0, 0);
-                if ($now->gt($cutoffTime)) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Attendance punch-in is not allowed after 2:00 PM.',
-                    ], 403);
-                }
-
                 $expectedStart = \Carbon\Carbon::parse($employee->work_start_time);
                 $lateMinutes = $now->gt($expectedStart)
                     ? $expectedStart->diffInMinutes($now)
