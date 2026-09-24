@@ -153,7 +153,7 @@ class AttendanceDetailApiController extends Controller
                     ], 422);
                 }
 
-                $cutoffTime = $now->copy()->setTime(14, 0, 0);
+                $cutoffTime = $now->copy()->setTime(15, 0, 0);
                 if ($now->gt($cutoffTime)) {
                     return response()->json([
                         'success' => false,
