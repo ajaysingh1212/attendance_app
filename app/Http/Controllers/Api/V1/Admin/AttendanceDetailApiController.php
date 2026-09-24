@@ -20,8 +20,6 @@ use App\Mail\AttendancePunchMail;
 use App\Mail\UserMonthlyAttendanceMail;
 use Illuminate\Support\Facades\Mail;
 use App\Models\User;
-use App\Services\OfficeAreaService;
-use App\Services\AttendanceStatusService;
 
 use Illuminate\Support\Facades\Log;
 
@@ -38,17 +36,11 @@ class AttendanceDetailApiController extends Controller
     {
         abort_if(Gate::denies('attendance_detail_access'), Response::HTTP_FORBIDDEN, '403 Forbidden');
 
-        $query = AttendanceDetail::with(['user']);
-        if (!auth()->user()->is_admin) {
-            $query->where('user_id', auth()->id());
-        }
-
-        return AttendanceDetailResource::collection($query->get());
+        return new AttendanceDetailResource(AttendanceDetail::with(['user'])->get());
     }
 
     public function store(StoreAttendanceDetailRequest $request)
     {
-        abort_unless(auth()->user()->is_admin, Response::HTTP_FORBIDDEN, 'Only admins can manually create attendance.');
         $attendanceDetail = AttendanceDetail::create($request->all());
 
         if ($request->input('punch_in_image', false)) {
@@ -67,14 +59,12 @@ class AttendanceDetailApiController extends Controller
     public function show(AttendanceDetail $attendanceDetail)
     {
         abort_if(Gate::denies('attendance_detail_show'), Response::HTTP_FORBIDDEN, '403 Forbidden');
-        abort_if(!auth()->user()->is_admin && $attendanceDetail->user_id !== auth()->id(), Response::HTTP_FORBIDDEN, 'Unauthorized access.');
 
         return new AttendanceDetailResource($attendanceDetail->load(['user']));
     }
 
     public function update(UpdateAttendanceDetailRequest $request, AttendanceDetail $attendanceDetail)
     {
-        abort_unless(auth()->user()->is_admin, Response::HTTP_FORBIDDEN, 'Only admins can edit attendance.');
         $attendanceDetail->update($request->all());
 
         if ($request->input('punch_in_image', false)) {
@@ -106,7 +96,6 @@ class AttendanceDetailApiController extends Controller
 
     public function destroy(AttendanceDetail $attendanceDetail)
     {
-        abort_unless(auth()->user()->is_admin, Response::HTTP_FORBIDDEN, 'Only admins can delete attendance.');
         abort_if(Gate::denies('attendance_detail_delete'), Response::HTTP_FORBIDDEN, '403 Forbidden');
 
         $attendanceDetail->delete();
@@ -118,15 +107,11 @@ class AttendanceDetailApiController extends Controller
     {
         $request->validate([
             'user_id'    => 'required|exists:users,id',
-            'latitude'   => 'required|numeric|between:-90,90',
-            'longitude'  => 'required|numeric|between:-180,180',
+            'latitude'   => 'nullable|string',
+            'longitude'  => 'nullable|string',
             'location'   => 'nullable|string',
-            'punch_image'=> 'required|file|image|max:10240',
+            'punch_image'=> 'nullable|file|image',
         ]);
-
-        if ((int) auth()->id() !== (int) $request->user_id && !auth()->user()?->is_admin) {
-            return response()->json(['success' => false, 'message' => 'You can only mark your own attendance.'], 403);
-        }
     
         try {
             $user = User::find($request->user_id);
@@ -160,25 +145,16 @@ class AttendanceDetailApiController extends Controller
                     ], 403);
                 }
             
+                $expectedStart = \Carbon\Carbon::parse($employee->work_start_time);
                 $now = now();
-                $expectedStart = $now->copy()->setTimeFromTimeString(\Carbon\Carbon::parse($employee->work_start_time)->format('H:i:s'));
-                $lateMinutes = $now->gt($expectedStart) ? $expectedStart->diffInMinutes($now) : 0;
-                $status = app(AttendanceStatusService::class)->forPunchIn($employee, $now);
-                $verification = null;
-                $areaMatch = null;
-                $attendanceAnywhere = strtolower(trim((string) $employee->branch_id)) === 'anywhere'
-                    || strtolower(trim((string) $employee->attendance_source)) === 'anywhere';
-                if (!$attendanceAnywhere) {
-                    $areaMatch = app(OfficeAreaService::class)->locate(
-                        $employee,
-                        (float) $request->latitude,
-                        (float) $request->longitude
-                    );
-                    if ($areaMatch['area']) {
-                        $verification = $areaMatch['inside'] ? 'approved' : 'in_review';
-                    }
-                }
-                $attendanceStatus = $verification === 'in_review' ? 'in_review' : $status;
+            
+                $lateMinutes = $now->gt($expectedStart)
+                    ? $expectedStart->diffInMinutes($now)
+                    : 0;
+            
+                $status = ($lateMinutes > $employee->delay_time)
+                    ? 'half_time'
+                    : 'present';
             
                 $attendance = AttendanceDetail::create([
                     'user_id'            => $request->user_id,
@@ -187,18 +163,7 @@ class AttendanceDetailApiController extends Controller
                     'punch_in_latitude'  => $request->latitude,
                     'punch_in_longitude' => $request->longitude,
                     'punch_in_location'  => $request->location,
-                    'status'             => $attendanceStatus,
-                    'verified_attendance_status' => $status,
-                    'verification_status' => $verification,
-                    'office_area_id'     => $areaMatch['area']->id ?? null,
-                    'review_started_at'  => $verification === 'in_review' ? $now : null,
-                    'review_deadline_at' => $verification === 'in_review' ? $now->copy()->addMinutes($areaMatch['area']->review_minutes) : null,
-                    'entered_office_area_at' => $verification === 'approved' ? $now : null,
-                    'latest_latitude'    => $request->latitude,
-                    'latest_longitude'   => $request->longitude,
-                    'punch_distance_meters' => $areaMatch['distance'] ?? null,
-                    'latest_distance_meters' => $areaMatch['distance'] ?? null,
-                    'review_note'        => $verification === 'in_review' ? 'Punch-in was outside the configured office area.' : null,
+                    'status'             => $status,
                     'type'               => 'self',
                     'date'               => $todayDate,
                 ]);
@@ -241,7 +206,7 @@ class AttendanceDetailApiController extends Controller
                                     'actual_in'         => $now->format('H:i:s'),
                                     'late_by_minutes'   => $lateMinutes,
                 
-                                    'status'            => $attendanceStatus,
+                                    'status'            => $status,
                                     'type'              => 'self',
                                 ]
                             )
@@ -257,11 +222,7 @@ class AttendanceDetailApiController extends Controller
             
                 return response()->json([
                     'success'    => true,
-                    'message'    => $verification === 'in_review'
-                        ? 'Punch-in recorded and sent for location review.'
-                        : 'Punch-in recorded successfully',
-                    'verification_status' => $verification,
-                    'review_deadline_at' => $attendance->review_deadline_at,
+                    'message'    => 'Punch-in recorded successfully',
                     'attendance' => new AttendanceDetailResource($attendance)
                 ], 200);
             }
@@ -382,30 +343,6 @@ class AttendanceDetailApiController extends Controller
                 'error'   => $e->getMessage()
             ], 500);
         }
-    }
-
-    public function updateLiveLocation(Request $request)
-    {
-        $data = $request->validate([
-            'user_id' => 'required|exists:users,id',
-            'latitude' => 'required|numeric|between:-90,90',
-            'longitude' => 'required|numeric|between:-180,180',
-        ]);
-        if ((int) auth()->id() !== (int) $data['user_id'] && !auth()->user()?->is_admin) {
-            return response()->json(['success' => false, 'message' => 'You can only update your own location.'], 403);
-        }
-        $employee = \App\Models\Employee::where('user_id', $data['user_id'])->firstOrFail();
-        $attendance = AttendanceDetail::where('user_id', $data['user_id'])
-            ->where('date', now()->toDateString())->latest()->firstOrFail();
-
-        $state = app(\App\Services\AttendanceLocationReviewService::class)->update(
-            $attendance,
-            $employee,
-            (float) $data['latitude'],
-            (float) $data['longitude'],
-        );
-
-        return response()->json(['success' => true] + $state);
     }
     
     
