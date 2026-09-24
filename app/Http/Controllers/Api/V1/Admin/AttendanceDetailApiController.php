@@ -107,6 +107,7 @@ class AttendanceDetailApiController extends Controller
     public function punchAttendance(Request $request)
     {
         $punchTypeForValidation = strtolower((string) $request->input('punch_type', ''));
+        $userStatusForValidation = strtoupper(trim((string) $request->input('user_status', '')));
 
         $request->validate([
             'user_id'     => 'required|exists:users,id',
@@ -115,6 +116,7 @@ class AttendanceDetailApiController extends Controller
             'longitude'   => 'required|numeric|between:-180,180',
             'location'    => 'nullable|string|max:500',
             'device_name' => 'nullable|string|max:255',
+            'user_status' => ['nullable', 'in:IN_LOCATION,OUT_LOCATION', Rule::requiredIf(in_array($punchTypeForValidation, ['in', 'verify'], true))],
             'punch_image' => ['nullable', 'file', 'image', 'max:10240', Rule::requiredIf(in_array($punchTypeForValidation, ['in', 'out'], true))],
         ]);
 
@@ -130,6 +132,7 @@ class AttendanceDetailApiController extends Controller
             }
 
             $punchType = strtolower((string) $request->punch_type);
+            $userStatus = strtoupper(trim((string) $request->input('user_status', '')));
             $now = now();
             $todayDate = $now->format('Y-m-d');
             $attendance = AttendanceDetail::where('user_id', $request->user_id)
@@ -203,11 +206,11 @@ class AttendanceDetailApiController extends Controller
                 $deadline = $attendance->review_deadline_at ? \Carbon\Carbon::parse($attendance->review_deadline_at) : null;
                 $isBeforeDeadline = $deadline ? $now->lessThan($deadline) : true;
 
-                if (! $officeMatch['inside']) {
+                if ($userStatus === 'OUT_LOCATION') {
                     if ($deadline && $now->greaterThanOrEqualTo($deadline)) {
                         $attendance->verification_status = 'suspicious';
-                        $attendance->review_note = 'Review time has expired. You have not reached the office area.';
                         $attendance->entered_office_area_at = null;
+                        $attendance->review_note = 'Review time has expired. You have not reached the office area.';
                         $attendance->save();
 
                         return response()->json([
@@ -336,13 +339,13 @@ class AttendanceDetailApiController extends Controller
                         $attendanceRecord->latest_longitude = $request->longitude;
                         $attendanceRecord->latest_distance_meters = $officeMatch['distance'];
 
-                        if ($officeMatch['inside']) {
-                            $attendanceRecord->verification_status = 'approved';
+                        if ($userStatus === 'IN_LOCATION') {
+                            $attendanceRecord->verification_status = 'verified';
                             $attendanceRecord->verified_attendance_status = $status;
                             $attendanceRecord->entered_office_area_at = $now;
                             $attendanceRecord->review_started_at = null;
                             $attendanceRecord->review_deadline_at = null;
-                            $attendanceRecord->review_note = null;
+                            $attendanceRecord->review_note = 'Employee marked inside the office area at punch-in.';
                         } else {
                             $attendanceRecord->verification_status = 'in_review';
                             $attendanceRecord->review_started_at = $now;
