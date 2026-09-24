@@ -17,11 +17,22 @@ class OfficeAreaService
             return collect();
         }
 
+        $branchId = $employee?->branch_id;
+        $officeBranchId = $employee?->office_branch_id;
+
         return OfficeArea::query()
             ->where('is_active', true)
-            ->when($employee?->branch_id, function ($query, $branchId) {
-                $query->where(function ($q) use ($branchId) {
-                    $q->whereNull('branch_id')->orWhere('branch_id', $branchId);
+            ->when($branchId || $officeBranchId, function ($query) use ($branchId, $officeBranchId) {
+                $query->where(function ($q) use ($branchId, $officeBranchId) {
+                    $q->where(function ($sub) use ($branchId) {
+                        $sub->whereNull('branch_id')->orWhere('branch_id', $branchId);
+                    });
+
+                    if ($officeBranchId) {
+                        $q->orWhere(function ($sub) use ($officeBranchId) {
+                            $sub->whereNull('office_branch_id')->orWhere('office_branch_id', $officeBranchId);
+                        });
+                    }
                 });
             })
             ->orderBy('radius_meters')
