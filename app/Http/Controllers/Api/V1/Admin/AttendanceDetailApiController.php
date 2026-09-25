@@ -134,6 +134,14 @@ class AttendanceDetailApiController extends Controller
             $punchType = strtolower((string) $request->punch_type);
             $userStatus = strtoupper(trim((string) $request->input('user_status', '')));
             $now = now();
+
+            if ($punchType === 'in' && $now->hour >= 14) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Punch In is not allowed after 2:00 PM.',
+                ], 422);
+            }
+
             $todayDate = $now->format('Y-m-d');
             $attendance = AttendanceDetail::where('user_id', $request->user_id)
                 ->where('date', $todayDate)
