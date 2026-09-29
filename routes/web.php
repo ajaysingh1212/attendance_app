@@ -413,3 +413,7 @@ Route::get('orders/{order}/invoice', [App\Http\Controllers\Admin\OrderController
 Route::get('/terms-and-conditions', function () {
     return view('terms');
 })->name('terms');
+
+Route::get('/privacy-policy', function () {
+    return view('privacy');
+})->name('privacy');
