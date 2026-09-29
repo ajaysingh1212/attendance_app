@@ -409,3 +409,7 @@ Route::get('admin/attendance/pdf', [App\Http\Controllers\Admin\HomeController::c
 
     Route::post('/attendance/save', [App\Http\Controllers\Admin\HomeController::class, 'saveAttendance'])->name('admin.attendance.save');
 Route::get('orders/{order}/invoice', [App\Http\Controllers\Admin\OrderController::class, 'downloadInvoice'])->name('admin.orders.invoice');
+
+Route::get('/terms-and-conditions', function () {
+    return view('terms');
+})->name('terms');
