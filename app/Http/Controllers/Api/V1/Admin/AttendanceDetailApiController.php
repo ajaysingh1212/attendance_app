@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 use Illuminate\Support\Carbon;
+use Illuminate\Validation\Rule;
 
 use App\Mail\AdminDailyAttendanceMail;
 
@@ -20,8 +21,6 @@ use App\Mail\AttendancePunchMail;
 use App\Mail\UserMonthlyAttendanceMail;
 use Illuminate\Support\Facades\Mail;
 use App\Models\User;
-use App\Services\OfficeAreaService;
-use App\Services\AttendanceStatusService;
 
 use Illuminate\Support\Facades\Log;
 
@@ -38,17 +37,11 @@ class AttendanceDetailApiController extends Controller
     {
         abort_if(Gate::denies('attendance_detail_access'), Response::HTTP_FORBIDDEN, '403 Forbidden');
 
-        $query = AttendanceDetail::with(['user']);
-        if (!auth()->user()->is_admin) {
-            $query->where('user_id', auth()->id());
-        }
-
-        return AttendanceDetailResource::collection($query->get());
+        return new AttendanceDetailResource(AttendanceDetail::with(['user'])->get());
     }
 
     public function store(StoreAttendanceDetailRequest $request)
     {
-        abort_unless(auth()->user()->is_admin, Response::HTTP_FORBIDDEN, 'Only admins can manually create attendance.');
         $attendanceDetail = AttendanceDetail::create($request->all());
 
         if ($request->input('punch_in_image', false)) {
@@ -67,14 +60,12 @@ class AttendanceDetailApiController extends Controller
     public function show(AttendanceDetail $attendanceDetail)
     {
         abort_if(Gate::denies('attendance_detail_show'), Response::HTTP_FORBIDDEN, '403 Forbidden');
-        abort_if(!auth()->user()->is_admin && $attendanceDetail->user_id !== auth()->id(), Response::HTTP_FORBIDDEN, 'Unauthorized access.');
 
         return new AttendanceDetailResource($attendanceDetail->load(['user']));
     }
 
     public function update(UpdateAttendanceDetailRequest $request, AttendanceDetail $attendanceDetail)
     {
-        abort_unless(auth()->user()->is_admin, Response::HTTP_FORBIDDEN, 'Only admins can edit attendance.');
         $attendanceDetail->update($request->all());
 
         if ($request->input('punch_in_image', false)) {
@@ -106,7 +97,6 @@ class AttendanceDetailApiController extends Controller
 
     public function destroy(AttendanceDetail $attendanceDetail)
     {
-        abort_unless(auth()->user()->is_admin, Response::HTTP_FORBIDDEN, 'Only admins can delete attendance.');
         abort_if(Gate::denies('attendance_detail_delete'), Response::HTTP_FORBIDDEN, '403 Forbidden');
 
         $attendanceDetail->delete();
@@ -116,112 +106,279 @@ class AttendanceDetailApiController extends Controller
     
     public function punchAttendance(Request $request)
     {
+        $punchTypeForValidation = strtolower((string) $request->input('punch_type', ''));
+        $userStatusForValidation = strtoupper(trim((string) $request->input('user_status', '')));
+
         $request->validate([
-            'user_id'    => 'required|exists:users,id',
-            'latitude'   => 'required|numeric|between:-90,90',
-            'longitude'  => 'required|numeric|between:-180,180',
-            'location'   => 'nullable|string',
-            'punch_image'=> 'required|file|image|max:10240',
+            'user_id'     => 'required|exists:users,id',
+            'punch_type'  => 'required|in:in,verify,out',
+            'latitude'    => 'required|numeric|between:-90,90',
+            'longitude'   => 'required|numeric|between:-180,180',
+            'location'    => 'nullable|string|max:500',
+            'device_name' => 'nullable|string|max:255',
+            'user_status' => ['nullable', 'in:IN_LOCATION,OUT_LOCATION', Rule::requiredIf(in_array($punchTypeForValidation, ['in', 'verify'], true))],
+            'punch_image' => ['nullable', 'file', 'image', 'max:10240', Rule::requiredIf(in_array($punchTypeForValidation, ['in', 'out'], true))],
         ]);
 
-        if ((int) auth()->id() !== (int) $request->user_id && !auth()->user()?->is_admin) {
-            return response()->json(['success' => false, 'message' => 'You can only mark your own attendance.'], 403);
-        }
-    
         try {
             $user = User::find($request->user_id);
             $employee = \App\Models\Employee::where('user_id', $request->user_id)->first();
-            if (!$employee) {
+
+            if (! $employee) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Employee not found'
+                    'message' => 'Employee not found',
                 ], 404);
             }
-    
-            $employee_id = $employee->id;
-            $todayDate = now()->format('Y-m-d');
-    
-            // Check today's attendance
+
+            $punchType = strtolower((string) $request->punch_type);
+            $userStatus = strtoupper(trim((string) $request->input('user_status', '')));
+            $now = now();
+
+            if ($punchType === 'in' && $now->hour >= 14) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Punch In is not allowed after 2:00 PM.',
+                ], 422);
+            }
+
+            $todayDate = $now->format('Y-m-d');
             $attendance = AttendanceDetail::where('user_id', $request->user_id)
                 ->where('date', $todayDate)
                 ->first();
-    
-            // CASE 1: No record yet → Punch In
-            if (!$attendance) {
-            
-                // 🚫 2:30 PM ke baad Punch-In allowed nahi hai
-                $currentTime = now();
-                $cutoffTime = now()->setTime(14, 00, 0);
-            
-                if ($currentTime->gt($cutoffTime)) {
+
+            $requestIp = $request->ip() ?? request()->ip();
+            $requestDevice = $request->input('device_name') ?? $request->userAgent();
+            $isAnywhereEmployee = strtolower(trim((string) ($employee->branch_id ?? ''))) === 'anywhere'
+                || strtolower(trim((string) ($employee->attendance_source ?? ''))) === 'anywhere';
+
+            if ($punchType === 'verify') {
+                if (! $attendance) {
                     return response()->json([
                         'success' => false,
-                        'message' => 'Attendance punch-in is not allowed after 2:00 PM.'
-                    ], 403);
+                        'message' => 'Punch In is required before verification.',
+                    ], 422);
                 }
-            
-                $now = now();
-                $expectedStart = $now->copy()->setTimeFromTimeString(\Carbon\Carbon::parse($employee->work_start_time)->format('H:i:s'));
-                $lateMinutes = $now->gt($expectedStart) ? $expectedStart->diffInMinutes($now) : 0;
-                $status = app(AttendanceStatusService::class)->forPunchIn($employee, $now);
-                $verification = null;
-                $areaMatch = null;
-                $attendanceAnywhere = strtolower(trim((string) $employee->branch_id)) === 'anywhere'
-                    || strtolower(trim((string) $employee->attendance_source)) === 'anywhere';
-                if (!$attendanceAnywhere) {
-                    $areaMatch = app(OfficeAreaService::class)->locate(
+
+                if (! $attendance->punch_in_time) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Punch In is required before verification.',
+                    ], 422);
+                }
+
+                if ($attendance->verification_status === 'verified') {
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Attendance location has already been verified.',
+                        'punch_type' => 'verify',
+                        'verification_status' => 'verified',
+                        'attendance' => new AttendanceDetailResource($attendance),
+                    ], 200);
+                }
+
+                if ($attendance->verification_status === 'suspicious') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Attendance is already marked suspicious and cannot be re-verified.',
+                        'punch_type' => 'verify',
+                        'verification_status' => 'suspicious',
+                    ], 422);
+                }
+
+                if ($attendance->verification_status !== 'in_review') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Attendance is not pending location verification.',
+                        'punch_type' => 'verify',
+                        'verification_status' => $attendance->verification_status,
+                    ], 422);
+                }
+
+                if ($isAnywhereEmployee) {
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Location verification is not required for this employee.',
+                        'punch_type' => 'verify',
+                        'verification_status' => $attendance->verification_status,
+                        'attendance' => new AttendanceDetailResource($attendance),
+                    ], 200);
+                }
+
+                $officeMatch = app(\App\Services\OfficeAreaService::class)->locate(
+                    $employee,
+                    (float) $request->latitude,
+                    (float) $request->longitude
+                );
+
+                $deadline = $attendance->review_deadline_at ? \Carbon\Carbon::parse($attendance->review_deadline_at) : null;
+                $isBeforeDeadline = $deadline ? $now->lessThan($deadline) : true;
+
+                if ($userStatus === 'OUT_LOCATION') {
+                    if ($deadline && $now->greaterThanOrEqualTo($deadline)) {
+                        $attendance->verification_status = 'suspicious';
+                        $attendance->entered_office_area_at = null;
+                        $attendance->review_note = 'Review time has expired. You have not reached the office area.';
+                        $attendance->save();
+
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Review time has expired. You have not reached the office area.',
+                            'punch_type' => 'verify',
+                            'verification_status' => 'suspicious',
+                            'attendance' => new AttendanceDetailResource($attendance),
+                        ], 422);
+                    }
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Please reach the office area first and try again.',
+                        'punch_type' => 'verify',
+                        'verification_status' => 'in_review',
+                        'attendance' => new AttendanceDetailResource($attendance),
+                    ], 422);
+                }
+
+                $attendance->office_area_id = $attendance->office_area_id ?? ($officeMatch['area']?->id ?? $attendance->office_area_id);
+                $attendance->latest_latitude = $request->latitude;
+                $attendance->latest_longitude = $request->longitude;
+                $attendance->latest_distance_meters = $officeMatch['distance'];
+                $attendance->entered_office_area_at = $now;
+
+                if ($isBeforeDeadline) {
+                    $attendance->verification_status = 'verified';
+                    $attendance->review_note = 'Employee entered the office area and completed verification before the review deadline.';
+                } else {
+                    $attendance->verification_status = 'suspicious';
+                    $attendance->review_note = 'Employee entered the office area after the review deadline.';
+                }
+
+                $attendance->save();
+
+                return response()->json([
+                    'success' => true,
+                    'message' => $isBeforeDeadline
+                        ? 'Office location verified successfully.'
+                        : 'Office location verified after the allowed review time.',
+                    'punch_type' => 'verify',
+                    'verification_status' => $attendance->verification_status,
+                    'attendance' => new AttendanceDetailResource($attendance),
+                ], 200);
+            }
+
+            if ($punchType === 'in') {
+                if ($attendance && $attendance->punch_in_time) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Duplicate Punch In for today.',
+                    ], 422);
+                }
+
+                if ($attendance && $attendance->punch_out_time) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Today\'s attendance is already completed.',
+                    ], 422);
+                }
+
+                $expectedStart = \Carbon\Carbon::parse($employee->work_start_time);
+                $lateMinutes = $now->gt($expectedStart)
+                    ? $expectedStart->diffInMinutes($now)
+                    : 0;
+                $status = $lateMinutes > (int) ($employee->delay_time ?? 0)
+                    ? 'half_time'
+                    : 'present';
+
+                $attendanceData = [
+                    'user_id'             => $request->user_id,
+                    'employee_id'         => $employee->id,
+                    'date'                => $todayDate,
+                    'punch_in_time'       => $now,
+                    'punch_in_latitude'   => $request->latitude,
+                    'punch_in_longitude'  => $request->longitude,
+                    'punch_in_location'   => $request->location,
+                    'status'              => $status,
+                    'type'                => 'self',
+                    'punch_type'          => 'in',
+                    'verification_status' => null,
+                    'verified_attendance_status' => $status,
+                ];
+
+                if (\Illuminate\Support\Facades\Schema::hasColumn('attendance_details', 'ip_address')) {
+                    $attendanceData['ip_address'] = $requestIp;
+                }
+
+                if (\Illuminate\Support\Facades\Schema::hasColumn('attendance_details', 'device_name')) {
+                    $attendanceData['device_name'] = $requestDevice;
+                }
+
+                if (\Illuminate\Support\Facades\Schema::hasColumn('attendance_details', 'changed_by')) {
+                    $attendanceData['changed_by'] = $user?->id ?? $request->user_id;
+                }
+
+                if ($attendance) {
+                    $attendance->fill($attendanceData);
+                    $attendance->save();
+                    $attendanceRecord = $attendance;
+                } else {
+                    $attendanceRecord = AttendanceDetail::create($attendanceData);
+                }
+
+                $officeMatch = null;
+                if (! $isAnywhereEmployee) {
+                    $officeMatch = app(\App\Services\OfficeAreaService::class)->locate(
                         $employee,
                         (float) $request->latitude,
                         (float) $request->longitude
                     );
-                    if ($areaMatch['area']) {
-                        $verification = $areaMatch['inside'] ? 'approved' : 'in_review';
+
+                    if ($officeMatch['area']) {
+                        $attendanceRecord->office_area_id = $officeMatch['area']->id;
+                        $attendanceRecord->punch_distance_meters = $officeMatch['distance'];
+                        $attendanceRecord->latest_latitude = $request->latitude;
+                        $attendanceRecord->latest_longitude = $request->longitude;
+                        $attendanceRecord->latest_distance_meters = $officeMatch['distance'];
+
+                        if ($userStatus === 'IN_LOCATION') {
+                            $attendanceRecord->verification_status = 'verified';
+                            $attendanceRecord->verified_attendance_status = $status;
+                            $attendanceRecord->entered_office_area_at = $now;
+                            $attendanceRecord->review_started_at = null;
+                            $attendanceRecord->review_deadline_at = null;
+                            $attendanceRecord->review_note = 'Employee marked inside the office area at punch-in.';
+                        } else {
+                            $attendanceRecord->verification_status = 'in_review';
+                            $attendanceRecord->review_started_at = $now;
+                            $attendanceRecord->review_deadline_at = $now->copy()->addMinutes((int) $officeMatch['area']->review_minutes);
+                            $attendanceRecord->review_note = 'Punch-in was outside the configured office area.';
+                            $attendanceRecord->entered_office_area_at = null;
+                        }
+
+                        $attendanceRecord->save();
                     }
                 }
-                $attendanceStatus = $verification === 'in_review' ? 'in_review' : $status;
-            
-                $attendance = AttendanceDetail::create([
-                    'user_id'            => $request->user_id,
-                    'employee_id'        => $employee_id,
-                    'punch_in_time'      => $now,
-                    'punch_in_latitude'  => $request->latitude,
-                    'punch_in_longitude' => $request->longitude,
-                    'punch_in_location'  => $request->location,
-                    'status'             => $attendanceStatus,
-                    'verified_attendance_status' => $status,
-                    'verification_status' => $verification,
-                    'office_area_id'     => $areaMatch['area']->id ?? null,
-                    'review_started_at'  => $verification === 'in_review' ? $now : null,
-                    'review_deadline_at' => $verification === 'in_review' ? $now->copy()->addMinutes($areaMatch['area']->review_minutes) : null,
-                    'entered_office_area_at' => $verification === 'approved' ? $now : null,
-                    'latest_latitude'    => $request->latitude,
-                    'latest_longitude'   => $request->longitude,
-                    'punch_distance_meters' => $areaMatch['distance'] ?? null,
-                    'latest_distance_meters' => $areaMatch['distance'] ?? null,
-                    'review_note'        => $verification === 'in_review' ? 'Punch-in was outside the configured office area.' : null,
-                    'type'               => 'self',
-                    'date'               => $todayDate,
-                ]);
-            
-                // Save punch_in image
+
                 if ($request->hasFile('punch_image')) {
-                    $attendance->addMedia($request->file('punch_image'))
-                        ->toMediaCollection('punch_in_image');
+                    $attendanceRecord->addMedia($request->file('punch_image'))->toMediaCollection('punch_in_image');
                 }
-            
-                // Attendance log with late_by_minutes also
-                \App\Models\AttendanceLog::create([
-                    'user_id'             => $request->user_id,
-                    'employee_id'         => $employee_id,
-                    'date'                => $todayDate,
-                    'expected_in'         => $employee->work_start_time,
-                    'expected_out'        => $employee->work_end_time,
-                    'actual_in'           => $now->format('H:i:s'),
-                    'late_by_minutes'     => $lateMinutes,  // <-- नया field डाल दिया
-                    'total_work_minutes'  => 0,
-                ]);
-                
-                // ✅ FAIL-SAFE MAIL AFTER PUNCH IN
+
+                \App\Models\AttendanceLog::updateOrCreate(
+                    [
+                        'user_id'     => $request->user_id,
+                        'employee_id' => $employee->id,
+                        'date'        => $todayDate,
+                    ],
+                    [
+                        'expected_in'        => $employee->work_start_time,
+                        'expected_out'       => $employee->work_end_time,
+                        'actual_in'          => $now->format('H:i:s'),
+                        'late_by_minutes'    => $lateMinutes,
+                        'left_early_by_minutes' => 0,
+                        'overtime_by_minutes' => 0,
+                        'total_work_minutes' => 0,
+                    ]
+                );
+
                 if ($user && $user->email) {
                     try {
                         Mail::to($user->email)->send(
@@ -230,19 +387,20 @@ class AttendanceDetailApiController extends Controller
                                 'punch_in',
                                 [
                                     'time'              => $now->format('d-m-Y H:i:s'),
-                                    'ip'                => request()->ip(),
-                                    'user_agent'        => request()->userAgent(),
-                
+                                    'ip'                => $requestIp,
+                                    'user_agent'        => $request->userAgent(),
                                     'latitude'          => $request->latitude,
                                     'longitude'         => $request->longitude,
                                     'location'          => $request->location,
-                
                                     'expected_in'       => $employee->work_start_time,
                                     'actual_in'         => $now->format('H:i:s'),
                                     'late_by_minutes'   => $lateMinutes,
-                
-                                    'status'            => $attendanceStatus,
+                                    'status'            => $status,
                                     'type'              => 'self',
+                                    'punch_type'        => 'in',
+                                    'verification_status' => $attendanceRecord->verification_status,
+                                    'office_area'       => $officeMatch['area']->name ?? null,
+                                    'punch_distance'    => $officeMatch['distance'] ?? null,
                                 ]
                             )
                         );
@@ -254,77 +412,117 @@ class AttendanceDetailApiController extends Controller
                         ]);
                     }
                 }
-            
+
                 return response()->json([
-                    'success'    => true,
-                    'message'    => $verification === 'in_review'
+                    'success' => true,
+                    'message' => $attendanceRecord->verification_status === 'in_review'
                         ? 'Punch-in recorded and sent for location review.'
                         : 'Punch-in recorded successfully',
-                    'verification_status' => $verification,
-                    'review_deadline_at' => $attendance->review_deadline_at,
-                    'attendance' => new AttendanceDetailResource($attendance)
+                    'punch_type' => 'in',
+                    'verification_status' => $attendanceRecord->verification_status,
+                    'attendance' => new AttendanceDetailResource($attendanceRecord),
                 ], 200);
             }
-    
-            // CASE 2: Record exists but punch_out not done → Punch Out
-            if ($attendance && !$attendance->punch_out_time) {
-            
-                // ✅ DEFAULT VALUES (VERY IMPORTANT)
-                $lateBy = 0;
-                $leftEarlyBy = 0;
-                $overtime = 0;
-            
-                $attendance->update([
-                    'punch_out_time'      => now(),
-                    'punch_out_latitude'  => $request->latitude,
-                    'punch_out_longitude' => $request->longitude,
-                    'punch_out_location'  => $request->location,
-                ]);
-            
-                // Save punch_out image
-                if ($request->hasFile('punch_image')) {
-                    $attendance->addMedia($request->file('punch_image'))
-                        ->toMediaCollection('punch_out_image');
+
+            if ($punchType === 'out') {
+                if (! $attendance) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Punch In is required before Punch Out',
+                    ], 422);
                 }
-            
-                // ✅ FETCH LOG FIRST
+
+                if (! $attendance->punch_in_time) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Punch In is required before Punch Out',
+                    ], 422);
+                }
+
+                if ($attendance->punch_out_time) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Duplicate Punch Out for today.',
+                    ], 422);
+                }
+
+                $attendance->punch_out_time = $now;
+                $attendance->punch_out_latitude = $request->latitude;
+                $attendance->punch_out_longitude = $request->longitude;
+                $attendance->punch_out_location = $request->location;
+                $attendance->punch_type = 'out';
+
+                if (\Illuminate\Support\Facades\Schema::hasColumn('attendance_details', 'ip_address') && empty($attendance->ip_address)) {
+                    $attendance->ip_address = $requestIp;
+                }
+
+                if (\Illuminate\Support\Facades\Schema::hasColumn('attendance_details', 'device_name') && empty($attendance->device_name)) {
+                    $attendance->device_name = $requestDevice;
+                }
+
+                if (\Illuminate\Support\Facades\Schema::hasColumn('attendance_details', 'changed_by')) {
+                    $attendance->changed_by = $user?->id ?? $request->user_id;
+                }
+
+                $officeMatch = null;
+                if (! $isAnywhereEmployee) {
+                    $officeMatch = app(\App\Services\OfficeAreaService::class)->locate(
+                        $employee,
+                        (float) $request->latitude,
+                        (float) $request->longitude
+                    );
+
+                    if ($officeMatch['area']) {
+                        $attendance->office_area_id = $attendance->office_area_id ?? $officeMatch['area']->id;
+                        $attendance->latest_latitude = $request->latitude;
+                        $attendance->latest_longitude = $request->longitude;
+                        $attendance->latest_distance_meters = $officeMatch['distance'];
+                    }
+                }
+
+                if ($request->hasFile('punch_image')) {
+                    $attendance->addMedia($request->file('punch_image'))->toMediaCollection('punch_out_image');
+                }
+
+                $attendance->save();
+
                 $attendanceLog = \App\Models\AttendanceLog::where('user_id', $request->user_id)
                     ->where('date', $todayDate)
                     ->first();
-            
-                // ✅ CALCULATIONS
-                if ($attendanceLog && !$attendanceLog->actual_out) {
-            
-                    $actualIn   = \Carbon\Carbon::parse($attendanceLog->actual_in);
-                    $actualOut  = now();
-                    $expectedIn = \Carbon\Carbon::parse($attendanceLog->expected_in);
-                    $expectedOut= \Carbon\Carbon::parse($attendanceLog->expected_out);
-            
-                    $lateBy = $actualIn->gt($expectedIn)
-                        ? $actualIn->diffInMinutes($expectedIn)
-                        : 0;
-            
-                    $leftEarlyBy = $actualOut->lt($expectedOut)
-                        ? $expectedOut->diffInMinutes($actualOut)
-                        : 0;
-            
-                    $totalWork = $actualIn->diffInMinutes($actualOut);
-                    $expectedWorkMinutes = $expectedIn->diffInMinutes($expectedOut);
-            
-                    $overtime = $totalWork > $expectedWorkMinutes
-                        ? $totalWork - $expectedWorkMinutes
-                        : 0;
-            
-                    $attendanceLog->update([
-                        'actual_out'            => $actualOut->format('H:i:s'),
-                        'late_by_minutes'       => $lateBy,
-                        'left_early_by_minutes' => $leftEarlyBy,
-                        'overtime_by_minutes'   => $overtime,
-                        'total_work_minutes'    => $totalWork,
-                    ]);
+
+                $actualIn = $attendance->punch_in_time
+                    ? \Carbon\Carbon::parse($attendance->punch_in_time)
+                    : ($attendanceLog && $attendanceLog->actual_in ? \Carbon\Carbon::parse($attendanceLog->actual_in) : $now);
+
+                $expectedIn = $employee->work_start_time ? \Carbon\Carbon::parse($todayDate . ' ' . $employee->work_start_time) : $actualIn;
+                $expectedOut = $employee->work_end_time ? \Carbon\Carbon::parse($todayDate . ' ' . $employee->work_end_time) : $now;
+                $lateBy = $actualIn->gt($expectedIn) ? $actualIn->diffInMinutes($expectedIn) : 0;
+                $leftEarlyBy = $now->lt($expectedOut) ? $expectedOut->diffInMinutes($now) : 0;
+                $totalWork = $actualIn->diffInMinutes($now);
+                $expectedWorkMinutes = $expectedIn->diffInMinutes($expectedOut);
+                $overtime = $totalWork > $expectedWorkMinutes ? $totalWork - $expectedWorkMinutes : 0;
+
+                $attendanceLogPayload = [
+                    'user_id' => $request->user_id,
+                    'employee_id' => $employee->id,
+                    'date' => $todayDate,
+                    'expected_in' => $employee->work_start_time,
+                    'expected_out' => $employee->work_end_time,
+                    'actual_in' => $actualIn->format('H:i:s'),
+                    'late_by_minutes' => $lateBy,
+                    'actual_out' => $now->format('H:i:s'),
+                    'left_early_by_minutes' => $leftEarlyBy,
+                    'overtime_by_minutes' => $overtime,
+                    'total_work_minutes' => $totalWork,
+                ];
+
+                if ($attendanceLog) {
+                    $attendanceLog->fill($attendanceLogPayload);
+                    $attendanceLog->save();
+                } else {
+                    \App\Models\AttendanceLog::create($attendanceLogPayload);
                 }
-            
-                // ✅ MAIL AFTER EVERYTHING IS READY
+
                 if ($user && $user->email) {
                     try {
                         Mail::to($user->email)->send(
@@ -332,23 +530,23 @@ class AttendanceDetailApiController extends Controller
                                 $user,
                                 'punch_out',
                                 [
-                                    'time'              => now()->format('d-m-Y H:i:s'),
-                                    'ip'                => request()->ip(),
-                                    'user_agent'        => request()->userAgent(),
-            
+                                    'time'              => $now->format('d-m-Y H:i:s'),
+                                    'ip'                => $requestIp,
+                                    'user_agent'        => $request->userAgent(),
                                     'latitude'          => $request->latitude,
                                     'longitude'         => $request->longitude,
                                     'location'          => $request->location,
-            
-                                    'expected_out'      => $attendanceLog->expected_out ?? null,
-                                    'actual_out'        => now()->format('H:i:s'),
-            
+                                    'expected_out'      => $expectedOut->format('H:i:s'),
+                                    'actual_out'        => $now->format('H:i:s'),
                                     'late_by_minutes'   => $lateBy,
                                     'left_early_by'     => $leftEarlyBy,
                                     'overtime'          => $overtime,
-            
                                     'status'            => $attendance->status,
                                     'type'              => 'self',
+                                    'punch_type'        => 'out',
+                                    'verification_status' => $attendance->verification_status,
+                                    'office_area'       => $officeMatch['area']->name ?? null,
+                                    'punch_distance'    => $officeMatch['distance'] ?? $attendance->punch_distance_meters,
                                 ]
                             )
                         );
@@ -360,52 +558,33 @@ class AttendanceDetailApiController extends Controller
                         ]);
                     }
                 }
-            
+
                 return response()->json([
-                    'success'    => true,
-                    'message'    => 'Punch-out recorded successfully',
-                    'attendance' => new AttendanceDetailResource($attendance)
+                    'success' => true,
+                    'message' => 'Punch-out recorded successfully',
+                    'punch_type' => 'out',
+                    'verification_status' => $attendance->verification_status,
+                    'attendance' => new AttendanceDetailResource($attendance),
                 ], 200);
             }
 
-    
-            // CASE 3: Already punched in and out → No more punches allowed
             return response()->json([
                 'success' => false,
-                'message' => 'You have already completed today\'s attendance'
-            ], 400);
-    
+                'message' => 'Invalid punch type.',
+            ], 422);
         } catch (\Exception $e) {
+            \Log::error('Punch attendance failed', [
+                'user_id' => $request->user_id,
+                'punch_type' => $request->input('punch_type'),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
             return response()->json([
                 'success' => false,
-                'message' => 'Error while saving attendance',
-                'error'   => $e->getMessage()
+                'message' => 'Unable to process attendance at this time.',
             ], 500);
         }
-    }
-
-    public function updateLiveLocation(Request $request)
-    {
-        $data = $request->validate([
-            'user_id' => 'required|exists:users,id',
-            'latitude' => 'required|numeric|between:-90,90',
-            'longitude' => 'required|numeric|between:-180,180',
-        ]);
-        if ((int) auth()->id() !== (int) $data['user_id'] && !auth()->user()?->is_admin) {
-            return response()->json(['success' => false, 'message' => 'You can only update your own location.'], 403);
-        }
-        $employee = \App\Models\Employee::where('user_id', $data['user_id'])->firstOrFail();
-        $attendance = AttendanceDetail::where('user_id', $data['user_id'])
-            ->where('date', now()->toDateString())->latest()->firstOrFail();
-
-        $state = app(\App\Services\AttendanceLocationReviewService::class)->update(
-            $attendance,
-            $employee,
-            (float) $data['latitude'],
-            (float) $data['longitude'],
-        );
-
-        return response()->json(['success' => true] + $state);
     }
     
     

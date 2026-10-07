@@ -65,7 +65,7 @@ class AttendanceReviewController extends Controller
             $finalStatus = $attendanceDetail->employee && $attendanceDetail->punch_in_time
                 ? app(AttendanceStatusService::class)->forPunchIn($attendanceDetail->employee, $attendanceDetail->punch_in_time)
                 : ($attendanceDetail->verified_attendance_status ?: 'present');
-            $verificationStatus = 'approved';
+            $verificationStatus = 'verified';
         } elseif ($data['status'] === 'reject') {
             $finalStatus = 'absent';
             $verificationStatus = 'rejected';

@@ -53,6 +53,8 @@ class AttendanceDetail extends Model implements HasMedia
         'paid_leave' => 'Paid Leave',
         'in_review'  => 'In Review',
         'suspicious' => 'Suspicious',
+        'approved'   => 'Approved',
+        'verified'   => 'Verified',
     ];
 
     protected $fillable = [
