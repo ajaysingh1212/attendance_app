@@ -64,8 +64,13 @@
 
 
 
-        {{-- IF PAYROLL ALREADY GENERATED --}}
-        @if($alreadyGenerated)
+        {{-- Final payroll is only available once attendance for the month is complete. --}}
+        @if(\Carbon\Carbon::create($year, $month, 1)->startOfMonth()->gte(now()->startOfMonth()))
+            <div class="alert alert-info mt-3">
+                Final payroll can be generated after this month ends.
+                View the current salary preview in Attendance Details.
+            </div>
+        @elseif($alreadyGenerated)
             <div class="alert alert-danger mt-3">
                 ⚠ Payroll already generated for this month.
             </div>
@@ -122,7 +127,7 @@
                     </div>
 
                     <small class="text-muted">
-                        This action will regenerate payroll for the selected month.
+                        This action will refresh pending payroll using the full month attendance. Paid or manually adjusted payroll is protected.
                     </small>
                 </div>
 
