@@ -1,6 +1,7 @@
 @extends('layouts.admin')
 
 @section('content')
+@include('admin.leaveRequests.partials.workspace', ['leavePageTitle' => 'Update leave request'])
 <div class="card">
     <div class="card-header">
         {{ trans('global.edit') }} {{ trans('cruds.leaveRequest.title_singular') }}
@@ -94,4 +95,5 @@
         </form>
     </div>
 </div>
+@include('admin.leaveRequests.partials.date_policy')
 @endsection

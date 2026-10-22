@@ -14,6 +14,11 @@ class StoreLeaveRequestRequest extends FormRequest
         return Gate::allows('leave_request_create');
     }
 
+    public function messages(): array
+    {
+        return ['date_from.after' => 'Aap current date ka leave apply nahi kar sakte. Please next day ya uske baad ki date select karein.'];
+    }
+
     public function rules()
     {
         return [
@@ -21,14 +26,8 @@ class StoreLeaveRequestRequest extends FormRequest
                 'string',
                 'nullable',
             ],
-            'date_from' => [
-                'string',
-                'nullable',
-            ],
-            'date_to' => [
-                'string',
-                'nullable',
-            ],
+            'date_from' => ['required', 'date', 'after:today'],
+            'date_to' => ['required', 'date', 'after_or_equal:date_from'],
             'leave_type_id' => [
                 'required',
                 'integer',

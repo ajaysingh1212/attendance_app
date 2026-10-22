@@ -245,6 +245,17 @@
                 </div>
                 <span class="att-badge">{{ $statusLabel }}</span>
             </div>
+            @if(isset($att->tracking_events) && $att->tracking_events->isNotEmpty())
+            <ol class="journey-steps" style="margin:16px 22px;max-height:320px">
+                @foreach($att->tracking_events as $event)
+                <li><time>{{ $event->occurred_at->format('d M, h:i:s A') }}</time>
+                    <strong>{{ ucwords(str_replace('_', ' ', $event->type)) }} &middot; {{ ucwords(str_replace('_', ' ', $event->status ?? '')) }}</strong>
+                    <p>{{ $event->note }}</p>
+                    @if($event->type === 'area_exit')<span>Direction: {{ $event->direction }} &middot; {{ $event->latitude }}, {{ $event->longitude }}</span>@endif
+                </li>
+                @endforeach
+            </ol>
+            @endif
             @if(!in_array($att->status, ['absent', 'leave']))
             <div class="att-times">
                 <div class="att-time-block">

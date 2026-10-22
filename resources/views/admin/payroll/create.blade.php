@@ -18,6 +18,7 @@
 
         <form method="POST" action="{{ route('admin.employees.store') }}" enctype="multipart/form-data">
             @csrf
+@include('admin.payroll.partials.tracking_settings')
             @if($isAdmin)
             <div class="row">
             <!-- Personal & Contact -->

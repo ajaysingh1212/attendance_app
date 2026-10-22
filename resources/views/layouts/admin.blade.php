@@ -227,6 +227,7 @@
 
     </script>
     @yield('scripts')
+    @include('partials.attendance_tracker')
 </body>
 
 </html>

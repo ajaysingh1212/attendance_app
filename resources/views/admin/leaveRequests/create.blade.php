@@ -1,6 +1,7 @@
 @extends('layouts.admin')
 
 @section('content')
+@include('admin.leaveRequests.partials.workspace', ['leavePageTitle' => 'Plan a new leave'])
 <div class="container py-4">
     <div class="row justify-content-center">
         <div class="col-lg-10">
@@ -94,4 +95,5 @@
         </div>
     </div>
 </div>
+@include('admin.leaveRequests.partials.date_policy')
 @endsection

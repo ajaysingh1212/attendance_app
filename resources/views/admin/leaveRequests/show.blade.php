@@ -1,5 +1,6 @@
 @extends('layouts.admin')
 @section('content')
+@include('admin.leaveRequests.partials.workspace', ['leavePageTitle' => 'Leave request details'])
 
 <div class="card">
     <div class="card-header">

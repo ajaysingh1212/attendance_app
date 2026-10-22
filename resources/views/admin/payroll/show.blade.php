@@ -1,6 +1,7 @@
 @extends('layouts.admin')
 
 @section('content')
+@include('admin.payroll.partials.tracking_settings', ['trackingReadOnly' => true])
 <div class="container">
     <h2 class="mb-4">👤 Employee Profile: {{ $employee->full_name }}</h2>
 

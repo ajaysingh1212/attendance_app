@@ -438,97 +438,20 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     @if(!auth()->user()->is_admin && $todayReview)
-    const reviewBox = document.getElementById('employeeReviewTimer');
-    const reviewClock = document.getElementById('employeeReviewClock');
-    let reviewStatus = reviewBox?.dataset.status;
-    let reviewRemaining = Number(reviewBox?.dataset.remainingSeconds || 0);
-    let reviewOverdue = Number(reviewBox?.dataset.overdueSeconds || 0);
-    let reviewArrived = reviewBox?.dataset.arrived === '1';
-    let reviewArrivalDelay = Number(reviewBox?.dataset.arrivalDelaySeconds || 0);
-    let reviewRequestRunning = false;
-    let lastLocationSentAt = 0;
-
-    function formatReviewTime(totalSeconds) {
-        const seconds = Math.max(0, Math.floor(totalSeconds));
-        const hours = Math.floor(seconds / 3600);
-        const minutes = Math.floor((seconds % 3600) / 60);
-        const value = String(minutes).padStart(2, '0') + ':' + String(seconds % 60).padStart(2, '0');
-        return hours ? String(hours).padStart(2, '0') + ':' + value : value;
+    const trackingClock = document.getElementById('employeeReviewClock');
+    let secondsLeft = {{ $todayReview->verification_status === 'holding' ? max(0, ($todayReview->holding_deadline_at?->timestamp ?? time()) - time()) : max(0, ($todayReview->review_deadline_at?->timestamp ?? time()) - time()) }};
+    let trackingStatus = @json($todayReview->verification_status);
+    function paintTracking() {
+        if (!trackingClock) return;
+        trackingClock.textContent = trackingStatus === 'suspicious' ? 'ADMIN REVIEW' : (['approved','verified'].includes(trackingStatus) ? 'COMPLETE' : new Date(secondsLeft*1000).toISOString().slice(11,19));
+        document.getElementById('employeeReviewLabel').textContent = trackingStatus === 'holding' ? 'Office holding in progress' : trackingStatus.replaceAll('_',' ').toUpperCase();
+        document.getElementById('employeeReviewMessage').textContent = trackingStatus === 'holding' ? 'Stay inside the office area until holding verification completes.' : (trackingStatus === 'suspicious' ? 'Attendance requires admin review.' : 'Office attendance location verification');
     }
-
-    function paintReviewClock() {
-        if (reviewArrived && reviewStatus === 'suspicious') {
-            reviewClock.textContent = 'Reached ' + formatReviewTime(reviewArrivalDelay) + ' late';
-        } else if (reviewStatus === 'suspicious') {
-            reviewClock.textContent = 'Late ' + formatReviewTime(reviewOverdue);
-        } else {
-            reviewClock.textContent = formatReviewTime(reviewRemaining);
-        }
-    }
-
-    function setReviewState(status, data = {}) {
-        reviewStatus = status;
-        if (['approved', 'verified'].includes(status)) {
-            reviewBox.classList.remove('is-suspicious');
-            document.getElementById('employeeReviewLabel').textContent = 'Attendance Approved';
-            document.getElementById('employeeReviewMessage').textContent = 'You reached the office area within the allowed time.';
-            reviewClock.textContent = 'PRESENT';
-            setTimeout(() => window.location.reload(), 1200);
-        } else if (status === 'suspicious') {
-            reviewBox.classList.add('is-suspicious');
-            document.getElementById('employeeReviewLabel').textContent = 'Suspicious Attendance';
-            document.getElementById('employeeReviewMessage').textContent = 'You did not reach the office area within the allowed time.';
-            reviewOverdue = Number(data.overdue_seconds ?? reviewOverdue);
-            if (data.arrived_at) {
-                reviewArrived = true;
-                reviewArrivalDelay = Number(data.arrival_delay_seconds || 0);
-                document.getElementById('employeeReviewMessage').textContent = 'Your office arrival time has been recorded for admin review.';
-            }
-            paintReviewClock();
-        }
-        if (data.distance_meters !== undefined && data.distance_meters !== null) {
-            document.getElementById('employeeReviewDistance').textContent = 'Current distance from office: ' + Math.round(data.distance_meters) + ' m';
-        }
-    }
-
-    async function sendReviewLocation(coords = null) {
-        if (reviewRequestRunning || !reviewBox || !['in_review', 'suspicious'].includes(reviewStatus) || reviewArrived) return;
-        reviewRequestRunning = true;
-        try {
-            const body = coords ? {latitude: coords.latitude, longitude: coords.longitude} : {};
-            const response = await fetch('{{ route('admin.attendance-details.liveLocation') }}', {
-                method: 'POST',
-                headers: {'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':'{{ csrf_token() }}'},
-                body: JSON.stringify(body)
-            });
-            const data = await response.json();
-            if (response.ok) setReviewState(data.status, data);
-        } finally {
-            reviewRequestRunning = false;
-        }
-    }
-
-    if (['in_review', 'suspicious'].includes(reviewStatus) && !reviewArrived && navigator.geolocation) {
-        navigator.geolocation.watchPosition(position => {
-            const now = Date.now();
-            if (now - lastLocationSentAt >= 10000) {
-                lastLocationSentAt = now;
-                sendReviewLocation(position.coords);
-            }
-        }, () => {}, {enableHighAccuracy:true, maximumAge:5000, timeout:15000});
-    }
-
-    setInterval(() => {
-        if (!reviewBox || reviewArrived) return;
-        if (reviewStatus === 'in_review') {
-            reviewRemaining = Math.max(0, reviewRemaining - 1);
-            if (reviewRemaining === 0) sendReviewLocation();
-        } else if (reviewStatus === 'suspicious') {
-            reviewOverdue++;
-        }
-        paintReviewClock();
-    }, 1000);
-    paintReviewClock();
+    window.addEventListener('attendance-tracking-state', event => {
+        trackingStatus=event.detail.status; secondsLeft=event.detail.remaining_seconds;
+        paintTracking();
+    });
+    setInterval(()=>{secondsLeft=Math.max(0,secondsLeft-1);paintTracking();},1000); paintTracking();
     @endif
 
     /* ══════════════════════════════════════════

@@ -47,10 +47,21 @@ class LeaveRequest extends Model implements HasMedia
         'status',
         'remark',
         'leave_type_id',
-        'created_at',
-        'updated_at',
-        'deleted_at',
     ];
+
+    protected static function booted(): void
+    {
+        static::saving(function (self $leave) {
+            if (!$leave->exists || $leave->isDirty('date_from')) {
+                if (!$leave->date_from || !\Carbon\Carbon::parse($leave->date_from)->startOfDay()->greaterThan(today())) {
+                    throw \Illuminate\Validation\ValidationException::withMessages(['date_from' => 'Current date ka leave apply nahi kar sakte. Please next day ya baad ki date select karein.']);
+                }
+            }
+            if (!$leave->date_to || \Carbon\Carbon::parse($leave->date_to)->lessThan(\Carbon\Carbon::parse($leave->date_from))) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['date_to' => 'End date must be on or after the start date.']);
+            }
+        });
+    }
 
     protected function serializeDate(DateTimeInterface $date)
     {

@@ -1,5 +1,6 @@
 @extends('layouts.admin')
 @section('content')
+@include('admin.leaveRequests.partials.workspace', ['leavePageTitle' => 'Leave requests'])
 @can('leave_request_create')
     <div style="margin-bottom: 10px;" class="row">
         <div class="col-lg-12">
@@ -19,6 +20,7 @@
     </div>
 
     <div class="card-body">
+        <div class="table-responsive">
         <table class=" table table-bordered table-striped table-hover ajaxTable datatable datatable-LeaveRequest">
             <thead>
                 <tr>
@@ -34,6 +36,7 @@
                     <th>
                         {{ trans('cruds.leaveRequest.fields.title') }}
                     </th>
+                    <th>Applied on</th>
                     <th>
                         {{ trans('cruds.leaveRequest.fields.date_from') }}
                     </th>
@@ -55,6 +58,7 @@
                 </tr>
             </thead>
         </table>
+        </div>
     </div>
 </div>
 
@@ -108,6 +112,7 @@
 { data: 'id', name: 'id' },
 { data: 'user_name', name: 'user.name' },
 { data: 'title', name: 'title' },
+{ data: 'created_at', name: 'created_at' },
 { data: 'date_from', name: 'date_from' },
 { data: 'date_to', name: 'date_to' },
 { data: 'leave_type_name', name: 'leaveType.name' },

@@ -11,13 +11,16 @@ class AttendanceReviewController extends Controller
 {
     public function feed()
     {
-        AttendanceDetail::where('verification_status', 'in_review')
-            ->whereNotNull('review_deadline_at')
-            ->where('review_deadline_at', '<=', now())
-            ->update(['status' => 'suspicious', 'verification_status' => 'suspicious']);
+        abort_unless(auth()->user()?->is_admin, 403);
+        AttendanceDetail::whereIn('verification_status', ['in_review', 'holding'])->each(function ($item) {
+            \Illuminate\Support\Facades\DB::transaction(function () use ($item) {
+                $locked = AttendanceDetail::whereKey($item->id)->lockForUpdate()->first();
+                app(\App\Services\AttendanceLocationReviewService::class)->expire($locked);
+            });
+        });
 
-        $items = AttendanceDetail::with(['user', 'employee.branch', 'employee.officeBranch', 'officeArea'])
-            ->whereIn('verification_status', ['in_review', 'suspicious'])
+        $items = AttendanceDetail::with(['user', 'employee.branch', 'employee.officeBranch', 'officeArea', 'trackingEvents'])
+            ->whereDate('date', now()->toDateString())
             ->latest('punch_in_time')
             ->limit(100)
             ->get()
@@ -26,7 +29,7 @@ class AttendanceReviewController extends Controller
                 'employee' => $item->employee->full_name ?? $item->user->name ?? 'Employee',
                 'employee_code' => $item->employee->employee_code ?? null,
                 'office' => $item->employee->branch->title ?? $item->employee->officeBranch->branch_name ?? null,
-                'status' => $item->verification_status,
+                'status' => $item->verification_status ?? $item->status ?? 'in_review',
                 'punch_time' => $item->punch_in_time,
                 'punch_location' => $item->punch_in_location,
                 'punch_latitude' => $item->punch_in_latitude,
@@ -39,6 +42,11 @@ class AttendanceReviewController extends Controller
                 'arrival_delay_seconds' => $item->arrival_delay_seconds,
                 'latest_distance' => $item->latest_distance_meters,
                 'reason' => $item->review_note,
+                'attendance_status' => $item->status,
+                'holding_deadline' => $item->holding_deadline_at,
+                'holding_seconds' => $item->holding_seconds,
+                'tracking_completed_at' => $item->tracking_completed_at,
+                'events' => $item->trackingEvents,
             ]);
 
         return response()->json(['items' => $items, 'server_time' => now()->toIso8601String()]);
@@ -46,6 +54,9 @@ class AttendanceReviewController extends Controller
 
     public function update(Request $request, AttendanceDetail $attendanceDetail)
     {
+        abort_unless(auth()->user()?->is_admin, 403);
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $attendanceDetail) {
+            $attendanceDetail = AttendanceDetail::whereKey($attendanceDetail->id)->lockForUpdate()->firstOrFail();
         $data = $request->validate([
             'status' => 'required|in:approve,reject,suspicious',
             'review_note' => 'required_if:status,approve|nullable|string|max:1000',
@@ -71,6 +82,7 @@ class AttendanceReviewController extends Controller
             $verificationStatus = 'rejected';
         }
 
+        $attendanceDetail->tracking_completed_at = now();
         $attendanceDetail->update([
             'status' => $finalStatus,
             'verified_attendance_status' => $finalStatus,
@@ -80,5 +92,6 @@ class AttendanceReviewController extends Controller
         ]);
 
         return response()->json(['success' => true, 'message' => 'Attendance status updated.', 'status' => $finalStatus]);
+        });
     }
 }

@@ -14,7 +14,7 @@ class Employee extends Model
         'user_id', 'employee_code', 'full_name', 'email', 'phone',
         'bank_name', 'bank_address', 'account_number', 'ifsc_code', 'pan_number', 'aadhaar_number', 'payment_mode',
         'work_start_time', 'work_end_time', 'working_hours', 'weekly_off_day',
-        'attendance_source', 'attendance_radius_meter',
+        'attendance_source', 'attendance_radius_meter', 'tracking_enabled', 'tracking_hours',
         'basic_salary', 'hra', 'other_allowances', 'deductions', 'net_salary',
         'date_of_joining', 'position', 'department', 'reporting_to', 'status', 'status_change_pending',
         'profile_photo', 'other_allowances_json','branch_id','office_branch_id','delay_time','blood_group',
@@ -27,6 +27,8 @@ class Employee extends Model
 
      protected $casts = [
         'other_allowances' => 'decimal:2',
+        'tracking_enabled' => 'boolean',
+        'tracking_hours' => 'decimal:2',
     ];
 
     public function user()

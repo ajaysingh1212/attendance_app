@@ -75,7 +75,8 @@
     </div>
 
     <form method="POST" action="{{ route('admin.employees.update', $employee->id) }}" enctype="multipart/form-data">
-        @csrf @method('PUT')
+        @csrf
+@include('admin.payroll.partials.tracking_settings') @method('PUT')
 
         {{-- ══════════════════════════════════════════
              TAB: PERSONAL

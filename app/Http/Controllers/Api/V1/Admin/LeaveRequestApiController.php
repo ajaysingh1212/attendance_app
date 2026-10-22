@@ -80,7 +80,7 @@ class LeaveRequestApiController extends Controller
             'user_id'       => 'required|exists:users,id',
             'leave_type_id' => 'required|string',
             'description'   => 'nullable|string',
-            'date_from'     => 'required|date',
+            'date_from'     => 'required|date|after:today',
             'date_to'       => 'required|date|after_or_equal:date_from',
             'status'        => 'nullable|in:pending,approved,reject',
             'remark'        => 'nullable|string',

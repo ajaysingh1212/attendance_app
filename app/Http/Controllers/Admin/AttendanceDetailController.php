@@ -53,23 +53,20 @@ class AttendanceDetailController extends Controller
         $todayReview = auth()->user()->is_admin ? null : AttendanceDetail::with('officeArea')
             ->where('user_id', auth()->id())
             ->where('date', now()->toDateString())
-            ->whereIn('verification_status', ['in_review', 'suspicious'])
+            ->whereIn('verification_status', ['in_review', 'holding', 'suspicious'])
             ->latest()
             ->first();
 
         return view('admin.attendanceDetails.index', compact('users', 'defaultUserId', 'todayReview'));
     }
 
-    public function updateOwnLiveLocation(Request $request, AttendanceLocationReviewService $reviewService)
+    public function updateOwnLiveLocation(\App\Http\Requests\AttendanceLocationRequest $request, AttendanceLocationReviewService $reviewService)
     {
         abort_if(auth()->user()->is_admin, Response::HTTP_FORBIDDEN, 'Employee location endpoint only.');
-        $data = $request->validate([
-            'latitude' => 'nullable|numeric|between:-90,90',
-            'longitude' => 'nullable|numeric|between:-180,180',
-        ]);
+        $data = $request->validated();
         $employee = Employee::where('user_id', auth()->id())->firstOrFail();
         $attendance = AttendanceDetail::where('user_id', auth()->id())
-            ->where('date', now()->toDateString())
+            ->when($request->filled('attendance_id'), fn ($query) => $query->whereKey($request->integer('attendance_id')))
             ->latest()
             ->firstOrFail();
 
@@ -78,6 +75,7 @@ class AttendanceDetailController extends Controller
             $employee,
             isset($data['latitude']) ? (float) $data['latitude'] : null,
             isset($data['longitude']) ? (float) $data['longitude'] : null,
+            $data,
         ));
     }
 
@@ -423,6 +421,12 @@ class AttendanceDetailController extends Controller
         }
 
         if ($request->has('punch_out_time')) {
+            if (!$isAdmin && $attendance->exists) {
+                app(AttendanceLocationReviewService::class)->update($attendance, $employee,
+                    $request->filled('punch_out_latitude') ? (float) $request->punch_out_latitude : null,
+                    $request->filled('punch_out_longitude') ? (float) $request->punch_out_longitude : null);
+                $attendance->refresh();
+            }
             $attendance->fill($request->only([
                 'punch_out_time', 'punch_out_latitude', 'punch_out_longitude', 'punch_out_location',
             ]));

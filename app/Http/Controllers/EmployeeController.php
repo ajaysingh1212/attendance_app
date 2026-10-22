@@ -77,6 +77,8 @@ class EmployeeController extends Controller
         $isAdmin = auth()->user()->roles()->where('title', 'Admin')->exists();
 
         $validated = $request->validate([
+            'tracking_enabled' => 'sometimes|boolean',
+            'tracking_hours' => 'required_if:tracking_enabled,1|nullable|numeric|min:0.08|max:24',
             'user_id'                    => 'nullable|exists:users,id',
             'branch_id'                  => 'required',
             'office_branch_id'           => 'nullable|exists:office_branches,id',
@@ -127,6 +129,8 @@ class EmployeeController extends Controller
             'signature'                  => 'nullable|file|max:5120',
             'experience_letter'          => 'nullable|file|max:5120',
         ]);
+
+        if (!$isAdmin) { unset($validated['tracking_enabled'], $validated['tracking_hours']); }
 
         if ($validated['employee_type'] === 'Permanent') {
             $validated['employee_duration_months'] = null;
@@ -192,6 +196,8 @@ class EmployeeController extends Controller
         $isAdmin = auth()->user()->roles()->where('title', 'Admin')->exists();
 
         $validated = $request->validate([
+            'tracking_enabled' => 'sometimes|boolean',
+            'tracking_hours' => 'required_if:tracking_enabled,1|nullable|numeric|min:0.08|max:24',
             'user_id'                  => 'required|exists:users,id',
             'employee_code'            => [
                 'required',
@@ -245,6 +251,8 @@ class EmployeeController extends Controller
             'signature'                => 'nullable|file|max:5120',
             'experience_letter'        => 'nullable|file|max:5120',
         ]);
+
+        if (!$isAdmin) { unset($validated['tracking_enabled'], $validated['tracking_hours']); }
 
         if ($validated['employee_type'] === 'Permanent') {
             $validated['employee_duration_months'] = null;

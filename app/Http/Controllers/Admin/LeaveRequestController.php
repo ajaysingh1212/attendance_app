@@ -54,6 +54,7 @@ class LeaveRequestController extends Controller
         $table->addColumn('leave_type_name', fn($row) => $row->leaveType?->name ?? '');
 
         $table->editColumn('title', fn($row) => $row->title ?? '');
+        $table->editColumn('created_at', fn($row) => $row->created_at?->format('d M Y, h:i A'));
         $table->editColumn('date_from', fn($row) => $row->date_from ?? '');
         $table->editColumn('date_to', fn($row) => $row->date_to ?? '');
 

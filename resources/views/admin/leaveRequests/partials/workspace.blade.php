@@ -1,0 +1,14 @@
+<style>
+.leave-workspace-hero{display:flex;justify-content:space-between;align-items:center;gap:20px;margin:0 0 24px;padding:28px 32px;border-radius:20px;background:linear-gradient(115deg,#173b56,#246c77);color:white;box-shadow:0 12px 30px #173b5615}.leave-workspace-hero small{letter-spacing:2px;font-size:10px;opacity:.75;font-weight:700}.leave-workspace-hero h2{font-size:27px;font-weight:750;margin:8px 0}.leave-workspace-hero p{margin:0;opacity:.8;font-size:13px}.leave-policy{background:#ffffff16;border:1px solid #ffffff28;border-radius:12px;padding:14px 20px;white-space:nowrap}.leave-policy strong{display:block;font-size:20px}.card{border:1px solid #e3e9f1;border-radius:16px;box-shadow:0 6px 24px #1c3d5c06;overflow:hidden}.card-header{background:#f6f9fc!important;color:#26425d!important;padding:20px 24px;font-weight:700;border-bottom:1px solid #e7edf5}.card-body{padding:26px}.form-control,.form-select{border-radius:9px;min-height:44px;border-color:#dbe3ed}.form-label,label{font-size:12px;color:#445d76;font-weight:700}.form-group,.mb-3{margin-bottom:22px}.btn{border-radius:9px;padding:10px 18px;font-weight:600}.table thead th{background:#f2f6fa;font-size:11px;letter-spacing:.5px;color:#50677e;text-transform:uppercase;padding:15px}.table td{vertical-align:middle!important;padding:14px!important}.leave-date-modal{border:0;border-radius:20px;padding:32px;max-width:450px;width:calc(100% - 32px);box-shadow:0 24px 80px #132b5340;color:#203a55}.leave-date-modal::backdrop{background:#10253b88}.leave-date-modal h4{font-weight:750}.leave-date-modal p{color:#61758b;line-height:1.7}.leave-stamps{display:flex;flex-wrap:wrap;gap:16px;margin-bottom:22px}.leave-stamps>div{flex:1;min-width:170px;background:#f4f8fc;border:1px solid #e1e9f2;border-radius:12px;padding:16px}.leave-stamps small{display:block;color:#72859b;margin-bottom:6px}@media(max-width:650px){.leave-workspace-hero{padding:22px;align-items:flex-start;flex-direction:column}.card-body{padding:18px}.leave-workspace-hero h2{font-size:23px}}
+</style>
+<div class="leave-workspace-hero">
+    <div><small>PEOPLE &amp; TIME OFF</small><h2>{{ $leavePageTitle ?? 'Leave requests' }}</h2><p>Plan time away, follow approvals and keep every request in view.</p></div>
+    <div class="leave-policy"><small>EARLIEST LEAVE DATE</small><strong>{{ now()->addDay()->format('d M Y') }}</strong><span>Apply from tomorrow onwards</span></div>
+</div>
+@if(isset($leaveRequest))
+<div class="leave-stamps">
+    <div><small>Applied on</small><strong>{{ $leaveRequest->created_at?->format('d M Y, h:i A') ?? 'Not recorded' }}</strong></div>
+    <div><small>Requested leave</small><strong>{{ $leaveRequest->date_from }} &rarr; {{ $leaveRequest->date_to }}</strong></div>
+    <div><small>Request status</small><strong>{{ $leaveRequest->status_label }}</strong></div>
+</div>
+@endif

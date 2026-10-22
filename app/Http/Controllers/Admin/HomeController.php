@@ -178,7 +178,7 @@ class HomeController
            ATTENDANCE
         ══════════════════════════════════════════════ */
 
-        $attendances = AttendanceDetail::whereBetween('date', [
+        $attendances = AttendanceDetail::with('trackingEvents')->whereBetween('date', [
                 $startDate->toDateString(),
                 $endDate->toDateString(),
             ])
@@ -253,6 +253,7 @@ class HomeController
                     'punch_out_location' => $attendance->punch_out_location,
 
                     'status'             => $attendance->status,
+                    'tracking_events' => $attendance->trackingEvents,
                 ];
             }
 
