@@ -43,6 +43,7 @@ class AttendanceReviewController extends Controller
                 'latest_distance' => $item->latest_distance_meters,
                 'reason' => $item->review_note,
                 'attendance_status' => $item->status,
+                'punch_evidence' => app(\App\Services\AttendancePunchEvidenceService::class)->summarize($item),
                 'holding_deadline' => $item->holding_deadline_at,
                 'holding_seconds' => $item->holding_seconds,
                 'tracking_completed_at' => $item->tracking_completed_at,

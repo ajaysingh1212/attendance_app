@@ -222,6 +222,55 @@ class AttendanceHoldingTest extends TestCase
         $this->assertTrue(Schema::hasTable('attendance_tracking_events'));
     }
 
+    public function test_punch_evidence_preserves_recorded_zero_distance(): void
+    {
+        [$employee, $attendance] = $this->punch(false);
+        $attendance->punch_distance_meters = 0;
+        $evidence = app(\App\Services\AttendancePunchEvidenceService::class)->summarize($attendance);
+        $this->assertSame(0.0, $evidence['distance_meters']);
+        $this->assertSame('recorded', $evidence['distance_source']);
+        $this->assertTrue($evidence['inside_current_radius']);
+    }
+
+    public function test_legacy_present_distance_is_labelled_recalculated_without_claiming_verification(): void
+    {
+        [$employee, $attendance] = $this->punch(false);
+        $attendance->verification_status = null;
+        $attendance->punch_in_latitude = 28.6001;
+        $attendance->punch_in_longitude = 77.2;
+        $before = $attendance->getAttributes();
+        $evidence = app(\App\Services\AttendancePunchEvidenceService::class)->summarize($attendance);
+        $this->assertSame('recalculated', $evidence['distance_source']);
+        $this->assertEqualsWithDelta(11.12, $evidence['distance_meters'], 0.1);
+        $this->assertSame('Not recorded', $evidence['location_verification']);
+        $this->assertStringContainsString('does not prove office entry', $evidence['reason']);
+        $this->assertSame($before, $attendance->getAttributes());
+    }
+
+    public function test_anywhere_present_with_missing_gps_is_explained_without_inventing_distance(): void
+    {
+        [$employee, $attendance] = $this->punch(false);
+        $employee->update(['attendance_source' => 'Anywhere']);
+        $attendance->verification_status = null;
+        $evidence = app(\App\Services\AttendancePunchEvidenceService::class)->summarize($attendance);
+        $this->assertSame('Anywhere', $evidence['current_location_policy']);
+        $this->assertNull($evidence['distance_meters']);
+        $this->assertNull($evidence['inside_current_radius']);
+        $this->assertStringContainsString('office entry is not required', $evidence['reason']);
+    }
+
+    public function test_outside_punch_evidence_does_not_change_a_saved_present_status(): void
+    {
+        [$employee, $attendance] = $this->punch(false);
+        $attendance->verification_status = null;
+        $attendance->punch_in_latitude = 28.61;
+        $attendance->punch_in_longitude = 77.2;
+        $evidence = app(\App\Services\AttendancePunchEvidenceService::class)->summarize($attendance);
+        $this->assertFalse($evidence['inside_current_radius']);
+        $this->assertGreaterThan(1000, $evidence['distance_meters']);
+        $this->assertSame('present', $attendance->status);
+    }
+
     protected function tearDown(): void
     {
         $this->travelBack();

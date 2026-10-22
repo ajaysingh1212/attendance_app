@@ -1,7 +1,7 @@
 @if(auth()->user()?->is_admin)
 <section class="tracking-board mt-4" id="attendanceReviewBoard">
     <div class="tracking-heading">
-        <div><span class="tracking-kicker">ATTENDANCE INTELLIGENCE</span><h4>Employee attendance journey</h4><p>Punch-in, office arrival, holding verification and exceptions in one timeline.</p></div>
+        <div><span class="tracking-kicker">ATTENDANCE INTELLIGENCE</span><h4>Employee attendance journey</h4><p>Attendance results, office verification and punch-in distance in one timeline.</p></div>
         <select id="journeyFilter" class="form-control" style="max-width:190px" aria-label="Filter attendance journeys">
             <option value="">All journeys</option><option value="in_review">Arrival pending</option><option value="holding">Holding active</option><option value="suspicious">Suspicious</option><option value="approved">Completed</option>
         </select>
@@ -83,6 +83,13 @@
 }
 .journey-update-label { display:block; font-size:10px; letter-spacing:1px; text-transform:uppercase; color:#637b92; margin-bottom:4px; }
 .journey-update-value { font-size:12px; color:#3f5b76; line-height:1.6; }
+.journey-evidence { padding:16px 18px; margin:0 0 20px; border-radius:16px; background:rgba(255,255,255,.47); border:1px solid rgba(255,255,255,.92); }
+.journey-evidence-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.journey-evidence-grid strong { display:block; color:#304f6a; font-size:16px; }
+.journey-evidence-meta { margin-top:10px; font-size:11px; line-height:1.7; color:#60778e; }
+.journey-evidence-reason { margin:12px 0 0; padding-top:12px; border-top:1px solid rgba(255,255,255,.9); font-size:12px; color:#47627b; line-height:1.7; }
+.journey-evidence-reason b { display:block; margin-bottom:4px; color:#304f6a; }
+
 .journey-steps { padding-left:18px; margin:18px 0; border-left:2px solid #dce7f1; list-style:none; max-height:420px; overflow:auto; }
 .journey-steps li { position:relative; padding:0 0 22px 10px; font-size:12px; color:#54667c; }
 .journey-steps li:before { content:''; position:absolute; left:-24px; top:4px; width:10px; height:10px; background:#76a8b4; border:2px solid white; border-radius:50%; }
@@ -122,11 +129,19 @@ document.addEventListener('DOMContentLoaded', () => {
             const remaining=deadline?Math.max(0,Math.ceil((Date.parse(deadline)-Date.now())/1000)):0;
             const duration=Math.floor(remaining/3600)+'h '+Math.floor(remaining%3600/60)+'m';
             const events=item.events?.length?item.events:[{type:'punch_in',status:item.status,occurred_at:item.punch_time,note:'Punch-in recorded'}];
+            const evidence=item.punch_evidence || {};
+            const meters=value=>value===null || value===undefined ? 'Not available' : Number(value).toLocaleString('en-IN',{maximumFractionDigits:2})+' m';
+            const distanceSource=evidence.distance_source==='recorded' ? 'Recorded at punch-in' : evidence.distance_source==='recalculated' ? 'Recalculated from saved GPS using current pin' : 'Distance evidence unavailable';
             const latestEvent=events[events.length-1];
             const latestActivity=latestEvent?.occurred_at ? time(latestEvent.occurred_at) : 'No activity recorded';
             const latestLabel=latestEvent?.type ? latestEvent.type.replaceAll('_',' ') : 'Journey update';
             return `<article class="journey-card ${escape(item.status)}"><div class="journey-top"><div><h5>${escape(item.employee)}</h5><small class="text-muted">${escape(item.employee_code)} | ${escape(item.office||'Assigned office')}</small></div><span class="journey-badge">${escape(item.status.replaceAll('_',' '))}</span></div>
             <div class="journey-timer">${item.status==='holding'?'Holding remaining: '+duration:item.tracking_completed_at?'Completed: '+escape(time(item.tracking_completed_at)):item.status==='in_review'?'Office arrival remaining: '+duration:'Attendance: '+escape(item.attendance_status)}<span class="journey-update"><span class="journey-update-label">Latest activity</span><span class="journey-update-value">${escape(latestLabel)} &middot; ${escape(latestActivity)}</span></span></div>
+            <div class="journey-evidence">
+                <div class="journey-evidence-grid"><div><span class="journey-update-label">Distance at punch-in</span><strong>${escape(meters(evidence.distance_meters))}</strong></div><div><span class="journey-update-label">Current allowed radius</span><strong>${escape(meters(evidence.radius_meters))}</strong></div></div>
+                <div class="journey-evidence-meta">${escape(distanceSource)}${evidence.area_name?' &middot; '+escape(evidence.area_name):''}<br>Location verification: ${escape(evidence.location_verification || 'Not recorded')} &middot; Current policy: ${escape(evidence.current_location_policy || 'Unknown')}${evidence.inside_current_radius===null || evidence.inside_current_radius===undefined?'':'<br>Saved punch distance is '+(evidence.inside_current_radius?'inside':'outside')+' the current radius.'}</div>
+                <p class="journey-evidence-reason"><b>Why this status?</b>${escape(evidence.reason || 'Status explanation is unavailable for this record.')}</p>
+            </div>
             <ol class="journey-steps">${events.map(event=>`<li><time>${escape(time(event.occurred_at))}</time><strong>${escape(event.type.replaceAll('_',' '))} | ${escape(event.status)}</strong><p>${escape(event.note)}</p>${event.latitude?`<span>Exit direction: ${escape(event.direction||'Unknown')} | <a target="_blank" rel="noopener" href="https://maps.google.com/?q=${encodeURIComponent(event.latitude+','+event.longitude)}">Exit location</a></span>`:''}</li>`).join('')}</ol>
             ${item.status==='suspicious'?`<div class="journey-actions"><button class="btn btn-success" data-action="approve" data-id="${item.id}">Approve attendance</button><button class="btn btn-outline-danger" data-action="reject" data-id="${item.id}">Mark absent</button></div>`:''}</article>`;
         }).join('')||'<p class="text-muted p-4">No attendance journeys match this filter.</p>';
