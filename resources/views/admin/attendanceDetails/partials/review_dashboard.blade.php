@@ -198,7 +198,16 @@
 .journey-card.open .jt-item { animation:jTlIn .5s cubic-bezier(.2,.8,.2,1) both; animation-delay:calc(var(--k,0) * 70ms + 120ms); }
 
 /* ===== Footer ===== */
-.journey-foot { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; margin-top:12px; padding-top:10px; border-top:1px solid var(--line); }
+.journey-foot { display:grid; grid-template-columns:max-content minmax(0,1fr); align-items:start; gap:12px; margin-top:12px; padding-top:10px; border-top:1px solid var(--line); }
+.journey-punch-location { min-width:0; padding:9px 11px; border-radius:12px; background:rgba(230,242,249,.7); border:1px solid rgba(138,180,203,.22); }
+.journey-punch-location .journey-label { margin-bottom:5px; display:flex; align-items:center; gap:5px; }
+.journey-punch-location svg { width:12px; height:12px; flex-shrink:0; }
+.journey-punch-address { margin:0; color:#344f68; font-size:11.5px; line-height:1.65; overflow-wrap:anywhere; white-space:pre-line; }
+.journey-punch-distance { display:block; margin-top:7px; font-size:11px; font-weight:750; color:#236779; }
+.journey-punch-source { display:block; margin-top:3px; font-size:10px; color:var(--ink-soft); line-height:1.5; }
+.journey-punch-location a { display:inline-flex; margin-top:6px; font-size:10.5px; font-weight:700; color:var(--teal); }
+.journey-foot .journey-actions { grid-column:1 / -1; justify-content:flex-end; }
+.journey-foot .journey-toggle { white-space:nowrap; }
 .journey-toggle {
     display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:10px; cursor:pointer;
     font-size:12px; font-weight:700; color:var(--teal); background:var(--teal-soft); border:1px solid rgba(14,124,134,.18);
@@ -266,15 +275,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const initials = n => String(n || '?').trim().split(/\s+/).slice(0, 2).map(p => p[0]?.toUpperCase() || '').join('') || '?';
     const meters = v => (v === null || v === undefined) ? 'Not available' : Number(v).toLocaleString('en-IN', {maximumFractionDigits: 2}) + ' m';
 
-    // Admin/HR ne manually sahi kiya ya nahi - backend ke alag-alag fields ko defensively check karte hain
+    // Use explicit edit evidence; automatic review notes are not admin corrections.
     function correction(item) {
-        const by = item.reviewed_by_name || item.reviewed_by || item.corrected_by || '';
-        const role = String(item.reviewed_by_role || item.reviewer_role || item.corrected_by_role || '').toUpperCase();
-        const note = item.review_note || '';
-        const at = item.reviewed_at || item.corrected_at || '';
-        const viaEvent = (item.events || []).find(e => /(admin|hr|review|correct|approve|reject)/i.test(e.type || '') && !/punch/i.test(e.type || ''));
-        const isCorrected = !!(item.is_corrected || by || note || at || viaEvent);
-        return { isCorrected, by: typeof by === 'object' ? (by?.name || '') : by, role, note, at: at || viaEvent?.occurred_at || '' };
+        const viaEvent = (item.events || []).filter(e => ['admin_edit', 'admin_review', 'admin_recorded'].includes(e.type)).slice(-1)[0];
+        const isCorrected = item.is_corrected === true || (item.is_corrected === undefined && !!viaEvent);
+        return {
+            isCorrected,
+            by: isCorrected ? (item.reviewed_by_name || '') : '',
+            role: isCorrected ? (item.reviewed_by_role || 'Admin') : '',
+            note: isCorrected ? (item.review_note || viaEvent?.note || '') : '',
+            at: isCorrected ? (item.reviewed_at || viaEvent?.occurred_at || '') : '',
+        };
     }
 
     function matches(item) {
@@ -372,6 +383,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="t"><b>${esc(fix.role || 'Admin/HR')}${fix.by ? ' - ' + esc(fix.by) : ''}</b>${fix.at ? '<br>' + esc(time(fix.at)) : ''}${fix.note ? '<br>Note: ' + esc(fix.note) : ''}</div>
             </div>` : '';
 
+        const unverified = !['approved', 'verified', 'holding'].includes(String(item.status));
+        const hasPunchGps = item.punch_latitude !== null && item.punch_latitude !== undefined && String(item.punch_latitude).trim() !== ''
+            && item.punch_longitude !== null && item.punch_longitude !== undefined && String(item.punch_longitude).trim() !== ''
+            && Number.isFinite(Number(item.punch_latitude)) && Math.abs(Number(item.punch_latitude)) <= 90
+            && Number.isFinite(Number(item.punch_longitude)) && Math.abs(Number(item.punch_longitude)) <= 180;
+        const punchAddress = String(item.punch_location || '').trim();
+        const locationBlock = unverified ? `<div class="journey-punch-location">
+            <span class="journey-label">${ICONS.pin}Punch-in location</span>
+            <p class="journey-punch-address">${esc(punchAddress || (hasPunchGps ? 'Address save nahi hua. GPS: '+item.punch_latitude+', '+item.punch_longitude : 'Punch-in address / GPS record available nahi hai.'))}</p>
+            <span class="journey-punch-distance">Pin se distance: ${esc(meters(ev.distance_meters))}</span>
+            <span class="journey-punch-source">${esc(distanceSource)}</span>
+            ${hasPunchGps ? `<a href="https://maps.google.com/?q=${encodeURIComponent(item.punch_latitude+','+item.punch_longitude)}" target="_blank" rel="noopener">Map par dekhein &nearr;</a>` : ''}
+        </div>` : '';
+
         const steps = timelineHtml(events);
 
         const actions = item.status === 'suspicious'
@@ -379,7 +404,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         return `<article class="journey-card ${esc(item.status)}${fix.isCorrected ? ' corrected' : ''}${isOpen ? ' open' : ''}${firstRender ? ' is-new' : ''}" data-card="${esc(item.id)}" style="--i:${index}">
             ${fix.isCorrected ? '<span class="journey-shine"></span>' : ''}
-            ${fix.isCorrected ? `<div class="journey-corrected-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>${esc(fix.role || 'Admin/HR')} ne sahi kiya</div>` : ''}
+            ${fix.isCorrected ? `<div class="journey-corrected-tag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>${esc(fix.role || 'Admin')} ne update kiya</div>` : ''}
             <div class="journey-top">
                 <div class="journey-avatar">${esc(initials(item.employee))}</div>
                 <div class="journey-id"><h5>${esc(item.employee)}</h5><small>${esc(item.employee_code)} | ${esc(item.office || 'Assigned office')}</small></div>
@@ -407,6 +432,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <span>${isOpen ? 'Kam dikhayein' : 'Aur dekhein'}</span>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
                 </button>
+                ${locationBlock}
                 ${actions}
             </div>
         </article>`;

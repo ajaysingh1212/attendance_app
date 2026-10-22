@@ -17,6 +17,10 @@ class AttendanceDetail extends Model implements HasMedia
 
     public $table = 'attendance_details';
 
+    public bool $isAutomaticLocationUpdate = false;
+
+    public bool $isNewAttendanceSave = false;
+
     protected $appends = [
         'punch_in_image',
         'punch_out_image',
@@ -103,6 +107,7 @@ class AttendanceDetail extends Model implements HasMedia
     protected static function booted(): void
     {
         static::saving(function (self $attendance) {
+            $attendance->isNewAttendanceSave = !$attendance->exists;
             if ($attendance->exists && $attendance->getRawOriginal('verification_status') === 'suspicious'
                 && ($attendance->isDirty('status') || $attendance->isDirty('verification_status'))
                 && !auth()->user()?->is_admin) {
@@ -132,10 +137,22 @@ class AttendanceDetail extends Model implements HasMedia
             }
         });
         static::saved(function (self $attendance) {
-            if ($attendance->wasRecentlyCreated || $attendance->wasChanged(['status', 'verification_status', 'entered_office_area_at', 'punch_in_time', 'punch_out_time'])) {
+            $editFields = ['status', 'verification_status', 'punch_in_time', 'punch_out_time',
+                'punch_in_latitude', 'punch_in_longitude', 'punch_out_latitude', 'punch_out_longitude',
+                'punch_in_location', 'punch_out_location', 'date', 'type', 'review_note', 'changed_by'];
+            if (!$attendance->isAutomaticLocationUpdate && auth()->user()?->is_admin
+                && ($attendance->isNewAttendanceSave || $attendance->wasChanged($editFields))) {
+                $attendance->trackingEvents()->create([
+                    'type' => $attendance->isNewAttendanceSave ? 'admin_recorded' : 'admin_edit',
+                    'status' => $attendance->verification_status ?: $attendance->status,
+                    'note' => 'Attendance '.($attendance->isNewAttendanceSave ? 'recorded' : 'updated').' by '.(auth()->user()->name ?: 'Admin').'.',
+                    'occurred_at' => now(), 'received_at' => now(),
+                ]);
+            }
+            if ($attendance->isNewAttendanceSave || $attendance->wasChanged(['status', 'verification_status', 'entered_office_area_at', 'punch_in_time', 'punch_out_time'])) {
                 $attendance->trackingEvents()->create([
                     'type' => match (true) {
-                        $attendance->wasRecentlyCreated => $attendance->punch_in_time ? 'punch_in' : 'attendance_recorded',
+                        $attendance->isNewAttendanceSave => $attendance->punch_in_time ? 'punch_in' : 'attendance_recorded',
                         $attendance->wasChanged('punch_out_time') => 'punch_out',
                         $attendance->wasChanged('punch_in_time') => 'punch_in',
                         $attendance->wasChanged('entered_office_area_at') => 'office_arrival',
@@ -147,7 +164,7 @@ class AttendanceDetail extends Model implements HasMedia
                     'note' => $attendance->review_note ?: 'Attendance recorded.',
                     'occurred_at' => now(), 'received_at' => now(),
                 ]);
-                if ($attendance->wasRecentlyCreated && $attendance->entered_office_area_at) {
+                if ($attendance->isNewAttendanceSave && $attendance->entered_office_area_at) {
                     $attendance->trackingEvents()->create([
                         'type' => 'office_arrival', 'status' => $attendance->verification_status ?: $attendance->status,
                         'note' => 'Employee was inside the office at punch-in.',
@@ -156,6 +173,11 @@ class AttendanceDetail extends Model implements HasMedia
                 }
             }
         });
+    }
+
+    public function changedBy()
+    {
+        return $this->belongsTo(User::class, 'changed_by');
     }
 
     public function trackingEvents()

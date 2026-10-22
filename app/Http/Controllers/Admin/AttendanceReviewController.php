@@ -19,12 +19,13 @@ class AttendanceReviewController extends Controller
             });
         });
 
-        $items = AttendanceDetail::with(['user', 'employee.branch', 'employee.officeBranch', 'officeArea', 'trackingEvents'])
+        $items = AttendanceDetail::with(['user', 'employee.branch', 'employee.officeBranch', 'officeArea', 'trackingEvents', 'changedBy.roles'])
             ->whereDate('date', now()->toDateString())
             ->latest('punch_in_time')
             ->limit(100)
             ->get()
             ->map(fn ($item) => [
+                ...app(\App\Services\AttendanceCorrectionService::class)->summarize($item),
                 'id' => $item->id,
                 'employee' => $item->employee->full_name ?? $item->user->name ?? 'Employee',
                 'employee_code' => $item->employee->employee_code ?? null,

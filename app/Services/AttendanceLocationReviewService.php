@@ -13,6 +13,7 @@ class AttendanceLocationReviewService
     {
         return DB::transaction(function () use ($attendance, $employee, $latitude, $longitude, $signals) {
             $attendance = AttendanceDetail::whereKey($attendance->id)->lockForUpdate()->firstOrFail();
+            $attendance->isAutomaticLocationUpdate = true;
             $this->expire($attendance);
             $active = !$attendance->tracking_completed_at && !$attendance->punch_out_time;
             if ($attendance->tracking_enabled) {
@@ -96,6 +97,7 @@ class AttendanceLocationReviewService
 
     public function expire(AttendanceDetail $attendance): void
     {
+        $attendance->isAutomaticLocationUpdate = true;
         if ($attendance->verification_status === 'in_review' && $attendance->review_deadline_at?->lessThanOrEqualTo(now())) {
             $this->suspicious($attendance, 'Employee did not reach the office before the arrival deadline.');
             $attendance->save();

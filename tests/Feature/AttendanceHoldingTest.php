@@ -271,6 +271,56 @@ class AttendanceHoldingTest extends TestCase
         $this->assertSame('present', $attendance->status);
     }
 
+    public function test_automatic_review_note_does_not_mark_an_admin_correction(): void
+    {
+        [$employee, $attendance] = $this->punch(false);
+        $attendance->review_note = 'Employee entered the office area before the review timer expired.';
+        $attendance->setRelation('changedBy', null);
+        $result = app(\App\Services\AttendanceCorrectionService::class)->summarize($attendance);
+        $this->assertFalse($result['is_corrected']);
+        $this->assertNull($result['reviewed_at']);
+    }
+
+    public function test_self_punch_editor_is_not_mistaken_for_an_admin_edit(): void
+    {
+        [$employee, $attendance] = $this->punch(false);
+        $attendance->user_id = 91;
+        $attendance->changed_by = 91;
+        $editor = new \App\Models\User(['name' => 'Employee']);
+        $editor->id = 91;
+        $attendance->setRelation('changedBy', $editor);
+        $this->assertFalse(app(\App\Services\AttendanceCorrectionService::class)->summarize($attendance)['is_corrected']);
+    }
+
+    public function test_admin_edits_are_recorded_even_when_only_a_note_changes(): void
+    {
+        [$employee, $attendance] = $this->punch(false);
+        $admin = \Mockery::mock(\App\Models\User::class)->makePartial();
+        $admin->name = 'Admin Reviewer';
+        $admin->shouldReceive('getIsAdminAttribute')->andReturn(true);
+        \Illuminate\Support\Facades\Auth::shouldReceive('user')->andReturn($admin);
+        \Illuminate\Support\Facades\Auth::shouldReceive('check')->andReturn(false);
+        $attendance->update(['review_note' => 'Corrected by admin.']);
+        $result = app(\App\Services\AttendanceCorrectionService::class)->summarize($attendance->fresh());
+        $this->assertTrue($result['is_corrected']);
+        $this->assertNotNull($result['reviewed_at']);
+        $this->assertStringContainsString('Admin Reviewer', $result['review_note']);
+        $this->assertSame(1, $attendance->trackingEvents()->where('type', 'admin_edit')->count());
+    }
+
+    public function test_admin_viewing_an_expired_timer_does_not_get_marked_as_editor(): void
+    {
+        [$employee, $attendance] = $this->punch();
+        $this->travel(7)->minutes();
+        $admin = \Mockery::mock(\App\Models\User::class)->makePartial();
+        $admin->shouldReceive('getIsAdminAttribute')->andReturn(true);
+        \Illuminate\Support\Facades\Auth::shouldReceive('user')->andReturn($admin);
+        \Illuminate\Support\Facades\Auth::shouldReceive('check')->andReturn(false);
+        app(AttendanceLocationReviewService::class)->expire($attendance);
+        $this->assertSame('suspicious', $attendance->fresh()->status);
+        $this->assertSame(0, $attendance->trackingEvents()->where('type', 'admin_edit')->count());
+    }
+
     protected function tearDown(): void
     {
         $this->travelBack();
