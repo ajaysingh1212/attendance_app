@@ -145,12 +145,57 @@
 .journey-section.review { background:var(--gold-soft); border-color:rgba(214,170,76,.5); }
 .journey-section.review .journey-label { color:var(--gold); }
 
-.journey-steps { padding-left:16px; margin:6px 0 0; border-left:2px solid #dce7f1; list-style:none; max-height:260px; overflow:auto; }
-.journey-steps li { position:relative; padding:0 0 14px 10px; font-size:12px; color:#54667c; }
-.journey-steps li:before { content:''; position:absolute; left:-22px; top:4px; width:10px; height:10px; background:#76a8b4; border:2px solid #fff; border-radius:50%; }
-.journey-steps strong { display:block; color:#314c66; font-size:12.5px; text-transform:capitalize; }
-.journey-steps time { font-size:10.5px; color:#687e94; }
-.journey-steps p { margin:3px 0; line-height:1.55; overflow-wrap:anywhere; }
+/* ===== Timeline (naya design) ===== */
+.jt-head-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+.jt-count { font-size:10px; font-weight:800; letter-spacing:.6px; padding:3px 9px; border-radius:999px; color:var(--teal); background:var(--teal-soft); }
+.journey-timeline { list-style:none; margin:0; padding:2px 4px 2px 0; max-height:300px; overflow:auto; scrollbar-width:thin; }
+.jt-item {
+    --tone:#4a7c9b; --tone-soft:#e6f0f7; --tone-ring:rgba(74,124,155,.35);
+    position:relative; display:grid; grid-template-columns:30px minmax(0,1fr); column-gap:12px; padding-bottom:14px;
+}
+.jt-item:last-child { padding-bottom:0; }
+.jt-item.tone-teal  { --tone:#0e7c86; --tone-soft:#e3f4f4; --tone-ring:rgba(14,124,134,.35); }
+.jt-item.tone-green { --tone:#1f7a57; --tone-soft:#e1f5ec; --tone-ring:rgba(31,122,87,.35); }
+.jt-item.tone-amber { --tone:#b7791f; --tone-soft:#fdf3dc; --tone-ring:rgba(183,121,31,.4); }
+.jt-item.tone-rose  { --tone:#b4233c; --tone-soft:#fde8ec; --tone-ring:rgba(180,35,60,.35); }
+.jt-item.tone-gold  { --tone:#9a6b12; --tone-soft:#fff4d6; --tone-ring:rgba(154,107,18,.4); }
+
+/* left rail: node + connecting line */
+.jt-rail { position:relative; display:flex; flex-direction:column; align-items:center; }
+.jt-node {
+    position:relative; z-index:1; flex:0 0 auto; width:30px; height:30px; border-radius:50%; display:grid; place-items:center;
+    color:var(--tone); background:var(--tone-soft); box-shadow:0 0 0 2px #fff, 0 0 0 3px var(--tone-ring), 0 5px 12px rgba(16,40,63,.12);
+}
+.jt-node svg { width:14px; height:14px; }
+.jt-line { flex:1 1 auto; width:2px; margin:4px 0 -10px; border-radius:2px; background:linear-gradient(to bottom, var(--tone-ring), rgba(16,40,63,.08)); }
+.jt-item:last-child .jt-line { display:none; }
+.jt-item.is-latest .jt-node::after {
+    content:''; position:absolute; inset:-5px; border-radius:50%; border:2px solid var(--tone); opacity:.5; animation:jRing 2s ease-out infinite;
+}
+
+/* right: event card */
+.jt-body {
+    min-width:0; padding:9px 12px; border-radius:12px; background:rgba(255,255,255,.85); border:1px solid var(--line);
+    border-left:3px solid var(--tone); box-shadow:0 3px 10px rgba(16,40,63,.04);
+    transition:transform .25s ease, box-shadow .25s ease;
+}
+.jt-body:hover { transform:translateX(3px); box-shadow:0 8px 18px rgba(16,40,63,.09); }
+.jt-top { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; }
+.jt-title { font-size:12.5px; font-weight:750; color:var(--ink); text-transform:capitalize; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.jt-latest { font-size:8.5px; font-weight:800; letter-spacing:.8px; text-transform:uppercase; padding:2px 6px; border-radius:999px; color:#fff; background:var(--tone); }
+.jt-status { font-size:9.5px; font-weight:800; letter-spacing:.6px; text-transform:uppercase; padding:3px 8px; border-radius:999px; color:var(--tone); background:var(--tone-soft); }
+.jt-time { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:4px; font-size:10.5px; color:var(--ink-soft); }
+.jt-gap { padding:1px 7px; border-radius:999px; background:rgba(16,40,63,.06); font-weight:700; }
+.jt-note { margin:6px 0 0; font-size:11.5px; line-height:1.6; color:#3f5b76; overflow-wrap:anywhere; }
+.jt-map {
+    display:inline-flex; align-items:center; gap:5px; margin-top:7px; padding:4px 9px; border-radius:8px; font-size:10.5px; font-weight:700;
+    color:var(--tone)!important; background:var(--tone-soft); text-decoration:none!important; transition:filter .2s ease;
+}
+.jt-map:hover { filter:brightness(.95); }
+.jt-map svg { width:11px; height:11px; }
+
+/* card khulne par events ek ke baad ek aate hain */
+.journey-card.open .jt-item { animation:jTlIn .5s cubic-bezier(.2,.8,.2,1) both; animation-delay:calc(var(--k,0) * 70ms + 120ms); }
 
 /* ===== Footer ===== */
 .journey-foot { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; margin-top:12px; padding-top:10px; border-top:1px solid var(--line); }
@@ -188,7 +233,10 @@
 @keyframes jShine { 0%,55% { left:-60%; } 100% { left:140%; } }
 @keyframes jToastIn { from { opacity:0; transform:translateX(30px); } to { opacity:1; transform:none; } }
 @keyframes jToastOut { to { opacity:0; transform:translateX(30px); } }
+@keyframes jRing { 0% { transform:scale(.8); opacity:.6; } 100% { transform:scale(1.5); opacity:0; } }
+@keyframes jTlIn { from { opacity:0; transform:translateX(-14px); } to { opacity:1; transform:none; } }
 @media (prefers-reduced-motion:reduce) {
+    .jt-item, .jt-node::after, .jt-body,
     .journey-card, .journey-card::before, .journey-card::after, .journey-shine, .journey-badge::before, .tracking-kicker::before, .journey-more, .journey-more-inner { animation:none!important; transition:none!important; }
 }
 
@@ -235,6 +283,70 @@ document.addEventListener('DOMContentLoaded', () => {
         return item.status === filter.value || (filter.value === 'approved' && item.status === 'verified');
     }
 
+    // ===== Timeline helpers =====
+    const svg = p => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+    const ICONS = {
+        pin:   svg('<path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>'),
+        exit:  svg('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>'),
+        enter: svg('<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17 5-5-5-5"/><path d="M15 12H3"/>'),
+        clock: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
+        shield:svg('<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6l-8-3Z"/><path d="m9 12 2 2 4-4"/>'),
+        alert: svg('<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>'),
+        check: svg('<path d="m20 6-11 11-5-5"/>'),
+        dot:   svg('<circle cx="12" cy="12" r="3"/>')
+    };
+    // event type + status se icon aur color decide karte hain
+    function eventStyle(e) {
+        const t = String(e.type || '').toLowerCase(), s = String(e.status || '').toLowerCase();
+        if (/suspicious|reject|absent/.test(t + s)) return {tone:'rose',  icon:ICONS.alert};
+        if (/admin|hr|review|correct/.test(t))      return {tone:'gold',  icon:ICONS.shield};
+        if (/punch/.test(t))                        return {tone:'teal',  icon:ICONS.pin};
+        if (/exit|left|leave|out/.test(t))          return {tone:'amber', icon:ICONS.exit};
+        if (/return|enter|arriv|reach|inside/.test(t)) return {tone:'green', icon:ICONS.enter};
+        if (/hold/.test(t))                         return {tone:'amber', icon:ICONS.clock};
+        if (/verif|approv|complete/.test(t + s))    return {tone:'green', icon:ICONS.check};
+        return {tone:'blue', icon:ICONS.dot};
+    }
+    const shortTime = v => {
+        if (!v) return 'Pending';
+        const d = new Date(String(v).replace(' ', 'T'));
+        return isNaN(d) ? String(v) : d.toLocaleString('en-IN', {day:'2-digit', month:'short', hour:'numeric', minute:'2-digit', hour12:true});
+    };
+    // pichhle event se kitna time baad hua
+    function gapText(prev, cur) {
+        if (!prev?.occurred_at || !cur?.occurred_at) return '';
+        const diff = Math.round((Date.parse(String(cur.occurred_at).replace(' ', 'T')) - Date.parse(String(prev.occurred_at).replace(' ', 'T'))) / 60000);
+        if (isNaN(diff) || diff < 0) return '';
+        if (diff < 1) return '1 min se kam baad';
+        if (diff < 60) return diff + ' min baad';
+        const h = Math.floor(diff / 60), m = diff % 60;
+        return h + 'h' + (m ? ' ' + m + 'm' : '') + ' baad';
+    }
+    function timelineHtml(events) {
+        // purane se naye order me sort (time na ho to original order rakho)
+        const sorted = events.map((e, i) => ({e, i}))
+            .sort((a, b) => {
+                const ta = Date.parse(String(a.e.occurred_at || '').replace(' ', 'T')), tb = Date.parse(String(b.e.occurred_at || '').replace(' ', 'T'));
+                return (isNaN(ta) || isNaN(tb)) ? a.i - b.i : (ta - tb || a.i - b.i);
+            }).map(x => x.e);
+        return sorted.map((e, k) => {
+            const st = eventStyle(e), gap = k ? gapText(sorted[k - 1], e) : '';
+            const latest = k === sorted.length - 1;
+            return `<li class="jt-item tone-${st.tone}${latest ? ' is-latest' : ''}" style="--k:${k}">
+                <div class="jt-rail"><span class="jt-node">${st.icon}</span><span class="jt-line"></span></div>
+                <div class="jt-body">
+                    <div class="jt-top">
+                        <span class="jt-title">${esc(String(e.type || 'event').replaceAll('_', ' '))}${latest ? '<span class="jt-latest">Latest</span>' : ''}</span>
+                        ${e.status ? `<span class="jt-status">${esc(String(e.status).replaceAll('_', ' '))}</span>` : ''}
+                    </div>
+                    <div class="jt-time"><span>${esc(shortTime(e.occurred_at))}</span>${gap ? `<span class="jt-gap">${esc(gap)}</span>` : ''}</div>
+                    ${e.note ? `<p class="jt-note">${esc(e.note)}</p>` : ''}
+                    ${e.latitude ? `<a class="jt-map" target="_blank" rel="noopener" href="https://maps.google.com/?q=${encodeURIComponent(e.latitude + ',' + e.longitude)}">${ICONS.pin}Exit location${e.direction ? ' &middot; ' + esc(e.direction) : ''}</a>` : ''}
+                </div>
+            </li>`;
+        }).join('');
+    }
+
     function cardHtml(item, index) {
         const deadline = item.status === 'holding' ? item.holding_deadline : item.deadline;
         const remaining = deadline ? Math.max(0, Math.ceil((Date.parse(deadline) - Date.now()) / 1000)) : 0;
@@ -260,7 +372,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="t"><b>${esc(fix.role || 'Admin/HR')}${fix.by ? ' - ' + esc(fix.by) : ''}</b>${fix.at ? '<br>' + esc(time(fix.at)) : ''}${fix.note ? '<br>Note: ' + esc(fix.note) : ''}</div>
             </div>` : '';
 
-        const steps = events.map(e => `<li><time>${esc(time(e.occurred_at))}</time><strong>${esc((e.type || '').replaceAll('_', ' '))} | ${esc(e.status)}</strong><p>${esc(e.note)}</p>${e.latitude ? `<span>Exit direction: ${esc(e.direction || 'Unknown')} | <a target="_blank" rel="noopener" href="https://maps.google.com/?q=${encodeURIComponent(e.latitude + ',' + e.longitude)}">Exit location</a></span>` : ''}</li>`).join('');
+        const steps = timelineHtml(events);
 
         const actions = item.status === 'suspicious'
             ? `<div class="journey-actions"><button class="btn btn-success" data-action="approve" data-id="${esc(item.id)}">Approve</button><button class="btn btn-outline-danger" data-action="reject" data-id="${esc(item.id)}">Mark absent</button></div>` : '';
@@ -285,7 +397,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
                 <div class="journey-section"><span class="journey-label">Why this status?</span><p>${esc(ev.reason || 'Status explanation is unavailable for this record.')}</p></div>
                 ${reviewBlock}
-                <div class="journey-section"><span class="journey-label">Timeline</span><ol class="journey-steps">${steps}</ol></div>
+                <div class="journey-section">
+                    <div class="jt-head-row"><span class="journey-label" style="margin:0">Timeline</span><span class="jt-count">${events.length} event${events.length > 1 ? 's' : ''}</span></div>
+                    <ol class="journey-timeline">${steps}</ol>
+                </div>
             </div></div>
             <div class="journey-foot">
                 <button type="button" class="journey-toggle" data-toggle="${esc(item.id)}" aria-expanded="${isOpen}">
