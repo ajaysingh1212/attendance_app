@@ -146,7 +146,7 @@ class AttendanceDetail extends Model implements HasMedia
                     'type' => $attendance->isNewAttendanceSave ? 'admin_recorded' : 'admin_edit',
                     'status' => $attendance->verification_status ?: $attendance->status,
                     'note' => 'Attendance '.($attendance->isNewAttendanceSave ? 'recorded' : 'updated').' by '.(auth()->user()->name ?: 'Admin').'.',
-                    'occurred_at' => now(), 'received_at' => now(),
+                    'occurred_at' => $attendance->created_at ?: now(), 'received_at' => now(),
                 ]);
             }
             if ($attendance->isNewAttendanceSave || $attendance->wasChanged(['status', 'verification_status', 'entered_office_area_at', 'punch_in_time', 'punch_out_time'])) {
