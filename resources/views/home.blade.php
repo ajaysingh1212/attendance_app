@@ -248,7 +248,7 @@
             @if(isset($att->tracking_events) && $att->tracking_events->isNotEmpty())
             <ol class="journey-steps" style="margin:16px 22px;max-height:320px">
                 @foreach($att->tracking_events as $event)
-                <li><time>{{ $event->occurred_at->format('d M, h:i:s A') }}</time>
+                <li><time>{{ ($event->type === 'punch_in' && $att->punch_in_time ? \Carbon\Carbon::parse($att->punch_in_time) : $event->occurred_at)->format('d M, h:i:s A') }}</time>
                     <strong>{{ ucwords(str_replace('_', ' ', $event->type)) }} &middot; {{ ucwords(str_replace('_', ' ', $event->status ?? '')) }}</strong>
                     <p>{{ $event->note }}</p>
                     @if($event->type === 'area_exit')<span>Direction: {{ $event->direction }} &middot; {{ $event->latitude }}, {{ $event->longitude }}</span>@endif
