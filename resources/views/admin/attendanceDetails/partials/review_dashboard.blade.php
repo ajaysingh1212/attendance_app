@@ -333,9 +333,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const h = Math.floor(diff / 60), m = diff % 60;
         return h + 'h' + (m ? ' ' + m + 'm' : '') + ' baad';
     }
-    function timelineHtml(events) {
+    function timelineHtml(events, punchTime) {
         // purane se naye order me sort (time na ho to original order rakho)
-        const sorted = events.map((e, i) => ({e, i}))
+        const sorted = events.map((event, i) => ({
+            e: event.type === 'punch_in' && punchTime ? {...event, occurred_at: punchTime} : event,
+            i
+        }))
             .sort((a, b) => {
                 const ta = Date.parse(String(a.e.occurred_at || '').replace(' ', 'T')), tb = Date.parse(String(b.e.occurred_at || '').replace(' ', 'T'));
                 return (isNaN(ta) || isNaN(tb)) ? a.i - b.i : (ta - tb || a.i - b.i);
@@ -397,7 +400,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ${hasPunchGps ? `<a href="https://maps.google.com/?q=${encodeURIComponent(item.punch_latitude+','+item.punch_longitude)}" target="_blank" rel="noopener">Map par dekhein &nearr;</a>` : ''}
         </div>` : '';
 
-        const steps = timelineHtml(events);
+        const steps = timelineHtml(events, item.punch_time);
 
         const actions = item.status === 'suspicious'
             ? `<div class="journey-actions"><button class="btn btn-success" data-action="approve" data-id="${esc(item.id)}">Approve</button><button class="btn btn-outline-danger" data-action="reject" data-id="${esc(item.id)}">Mark absent</button></div>` : '';
