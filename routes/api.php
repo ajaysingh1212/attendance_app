@@ -177,4 +177,6 @@ Route::group(['prefix' => 'v1', 'as' => 'api.', 'namespace' => 'Api\V1\Admin'], 
     
 });
 
+// test route for checking if the api is working
+
 
