@@ -29,6 +29,7 @@ class Employee extends Model
         'other_allowances' => 'decimal:2',
         'tracking_enabled' => 'boolean',
         'tracking_hours' => 'decimal:2',
+        'employee_duration_months' => 'integer',
     ];
 
     public function user()
